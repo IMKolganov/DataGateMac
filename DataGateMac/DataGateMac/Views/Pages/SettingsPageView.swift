@@ -7,6 +7,7 @@ import SwiftUI
 
 struct SettingsPageView: View {
     @ObservedObject var authState: AuthStateStore
+    @State private var showAbout = false
 
     var body: some View {
         ScrollView {
@@ -40,13 +41,22 @@ struct SettingsPageView: View {
                 Divider()
 
                 Button {
-                    if let url = URL(string: "https://github.com/IMKolganov/DataGateMac") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    showAbout = true
                 } label: {
                     Label("About", systemImage: "info.circle")
                 }
                 .buttonStyle(.bordered)
+                .popover(isPresented: $showAbout, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Link(destination: URL(string: "https://datagateapp.com")!) {
+                            Label("datagateapp.com", systemImage: "globe")
+                        }
+                        Link(destination: URL(string: "https://github.com/IMKolganov/DataGateMac")!) {
+                            Label("GitHub", systemImage: "link")
+                        }
+                    }
+                    .padding(20)
+                }
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)

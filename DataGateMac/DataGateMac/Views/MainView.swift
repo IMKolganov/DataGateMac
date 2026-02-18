@@ -42,7 +42,7 @@ struct MainView: View {
                 case .access:
                     AccessPageView(authState: authState)
                 case .statistics:
-                    StatisticsPageView()
+                    StatisticsPageView(authState: authState)
                 case .settings:
                     SettingsPageView(authState: authState)
                 }
