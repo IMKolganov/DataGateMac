@@ -63,7 +63,7 @@ struct LoginView: View {
         do {
             let config = try AppConfig.load()
             let service = GoogleAuthService(config: config)
-            statusText = "Waiting for Google sign-in… Close browser? Tap Cancel."
+            statusText = "Waiting for sign-in… Tap Cancel to abort."
 
             let response = try await service.signInAndLogin(canceller: oauthCanceller)
             authState.completeLogin(response)

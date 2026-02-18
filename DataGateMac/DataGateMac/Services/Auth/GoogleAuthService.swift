@@ -2,22 +2,24 @@
 //  GoogleAuthService.swift
 //  DataGateMac
 //
-//  Google OAuth flow: open browser, receive redirect on localhost, exchange code via API.
-//  Matches DataGateWin GoogleAuthService behavior.
+//  Google OAuth loopback flow: http://127.0.0.1:PORT — required by Google for desktop apps.
+//  Matches DataGateWin behavior. Custom URL schemes are restricted by Google policy.
 //
 
 import Foundation
 import Network
 import AppKit
 import CommonCrypto
+import os.log
 
-private func oauthLog(_ msg: String) {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm:ss.SSS"
-    print("[OAuth \(formatter.string(from: Date()))] \(msg)")
+private let oauthLog = Logger(subsystem: "imkolganov.DataGateMac", category: "OAuth")
+
+private func log(_ msg: String) {
+    oauthLog.info("\(msg)")
+    print("[DataGate OAuth] \(msg)")
 }
 
-/// Call cancel() to abort the OAuth redirect wait (e.g. when user closes browser).
+/// Call cancel() to abort the OAuth redirect wait.
 final class OAuthCanceller {
     private var listener: NWListener?
     private var onCancel: (() -> Void)?
@@ -111,7 +113,7 @@ final class GoogleAuthService {
     }
 
     private func receiveRedirect(port: Int, openUrl: String, canceller: OAuthCanceller?) async throws -> [String: String] {
-        oauthLog("receiveRedirect: starting, port=\(port)")
+        log("Starting OAuth redirect listener on port \(port)")
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String: String], Error>) in
             let queue = DispatchQueue(label: "com.datagate.oauth.redirect")
             var didResume = false
@@ -128,64 +130,69 @@ final class GoogleAuthService {
                 let params = NWParameters.tcp
                 params.allowLocalEndpointReuse = true
                 listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: UInt16(port))!)
-                oauthLog("listener created, port=\(port)")
+                log("Listener created")
             } catch {
+                log("Listener failed: \(error.localizedDescription)")
                 let msg = (error as NSError).domain == NSPOSIXErrorDomain && (error as NSError).code == 1
-                    ? "Cannot start OAuth redirect server (Operation not permitted). The app needs \"Incoming Network Connections\" entitlement."
+                    ? "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement."
                     : error.localizedDescription
                 continuation.resume(throwing: AuthError.listenerFailed(msg))
                 return
             }
 
             canceller?.register(listener: listener) {
+                log("User cancelled")
                 resumeOnce { continuation.resume(throwing: AuthError.cancelled) }
             }
 
             listener.stateUpdateHandler = { state in
-                oauthLog("listener state: \(String(describing: state))")
+                log("Listener state: \(String(describing: state))")
                 if state == .ready {
-                    oauthLog("listener READY, opening browser")
-                    NSWorkspace.shared.open(URL(string: openUrl)!)
-                    oauthLog("browser opened, waiting for redirect on 127.0.0.1:\(port)...")
+                    log("Listener ready, opening browser on main thread")
+                    DispatchQueue.main.async {
+                        NSWorkspace.shared.open(URL(string: openUrl)!)
+                        log("Browser opened, waiting for redirect to http://127.0.0.1:\(port)/")
+                    }
                 } else if case .failed(let err) = state {
-                    oauthLog("listener FAILED: \(err)")
-                } else if case .cancelled = state {
-                    oauthLog("listener CANCELLED")
+                    log("Listener failed: \(err.debugDescription)")
                 }
             }
 
             listener.newConnectionHandler = { connection in
-                oauthLog("NEW CONNECTION received")
+                log("Incoming connection received")
                 connection.start(queue: queue)
 
                 var received = Data()
-                connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
-                    if let data = data { received.append(data) }
-                    if isComplete || error != nil {
-                        oauthLog("request received, isComplete=\(isComplete), error=\(String(describing: error))")
-                        if let raw = String(data: received, encoding: .utf8) {
-                            oauthLog("request first line: \(raw.prefix(200))")
+                func receiveMore() {
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                        if let data = data { received.append(data) }
+                        let hasCompleteRequest = received.contains(Data("\r\n\r\n".utf8)) || (String(data: received, encoding: .utf8) ?? "").contains("?code=")
+                        if isComplete || error != nil || hasCompleteRequest {
+                            log("Request received, isComplete=\(isComplete), hasComplete=\(hasCompleteRequest)")
+                            let query = Self.parseQueryFromRequest(received)
+                            let html = "<html><body><h2>Success!</h2><p>You can close this window now.</p></body></html>"
+                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
+                            guard let responseData = response.data(using: .utf8) else {
+                                connection.cancel()
+                                listener.cancel()
+                                resumeOnce { continuation.resume(returning: query) }
+                                return
+                            }
+                            connection.send(content: responseData, completion: .contentProcessed { _ in
+                                log("Response sent, OAuth redirect complete")
+                                connection.cancel()
+                                listener.cancel()
+                                resumeOnce { continuation.resume(returning: query) }
+                            })
+                        } else {
+                            receiveMore()
                         }
-                        let query = Self.parseQueryFromRequest(received)
-                        let html = "<html><body><h2>Success!</h2><p>You can close this window now.</p></body></html>"
-                        let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
-                        guard let responseData = response.data(using: .utf8) else {
-                            connection.cancel()
-                            listener.cancel()
-                            resumeOnce { continuation.resume(returning: query) }
-                            return
-                        }
-                        connection.send(content: responseData, completion: .contentProcessed { _ in
-                            oauthLog("HTTP response sent to browser")
-                            connection.cancel()
-                            listener.cancel()
-                            resumeOnce { continuation.resume(returning: query) }
-                        })
                     }
                 }
+                receiveMore()
             }
 
-            oauthLog("listener.start() called")
+            log("Starting listener")
             listener.start(queue: queue)
         }
     }
@@ -281,7 +288,7 @@ final class GoogleAuthService {
             case .authorizationFailed(let msg): return msg
             case .stateMismatch: return "State validation failed."
             case .noCodeReturned: return "Authorization code was not returned."
-            case .listenerFailed(let msg): return "Could not start redirect listener: \(msg)"
+            case .listenerFailed(let msg): return msg
             case .httpError(let msg): return msg
             case .apiLoginFailed(let msg): return "API login failed: \(msg)"
             case .cancelled: return "Sign-in cancelled."
