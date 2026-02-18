@@ -13,5 +13,7 @@ struct DataGateMacApp: App {
         WindowGroup {
             RootView()
         }
+        .defaultSize(width: 920, height: 680)
+        .windowResizability(.contentMinSize)
     }
 }

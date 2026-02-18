@@ -9,6 +9,11 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var authState = AuthStateStore()
+    @AppStorage(AppAppearanceStorage.key) private var appearanceRaw: String = AppAppearance.system.rawValue
+
+    private var appearance: AppAppearance {
+        AppAppearance(rawValue: appearanceRaw) ?? .system
+    }
 
     var body: some View {
         Group {
@@ -21,6 +26,7 @@ struct RootView: View {
                 LoginView(authState: authState)
             }
         }
+        .preferredColorScheme(appearance.preferredColorScheme)
         .task {
             await authState.restoreFromStorage()
         }

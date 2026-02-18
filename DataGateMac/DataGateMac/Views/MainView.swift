@@ -29,11 +29,42 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(NavItem.allCases, id: \.self, selection: $selection) { item in
-                Label(item.rawValue, systemImage: item.icon)
-                    .tag(item)
+            VStack(spacing: 0) {
+                List(NavItem.allCases, id: \.self, selection: $selection) { item in
+                    Label(item.rawValue, systemImage: item.icon)
+                        .tag(item)
+                }
+                .listStyle(.sidebar)
+
+                if authState.isAuthorized {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let name = authState.displayName, !name.isEmpty {
+                            Text(name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        if let mail = authState.email, !mail.isEmpty {
+                            Text(mail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        if authState.displayName == nil && authState.email == nil {
+                            Text("Logged in")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.primary.opacity(0.06))
+                }
             }
-            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {
             Group {
                 switch selection {
@@ -47,6 +78,7 @@ struct MainView: View {
                     SettingsPageView(authState: authState)
                 }
             }
+            .frame(minWidth: 720, minHeight: 400)
         }
     }
 }

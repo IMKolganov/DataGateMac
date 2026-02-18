@@ -67,7 +67,7 @@ struct StatisticsPageView: View {
             }
             .padding(24)
         }
-        .frame(minWidth: 500, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 720, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .topLeading)
         .task {
             await load()
         }
@@ -97,35 +97,38 @@ struct StatisticsPageView: View {
                 }
             }
 
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("From")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    DatePicker("", selection: $from, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("To")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    DatePicker("", selection: $to, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Grouping")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $grouping) {
-                        Text("Auto").tag(OverviewGrouping.auto)
-                        Text("Hours").tag(OverviewGrouping.hours)
-                        Text("Days").tag(OverviewGrouping.days)
-                        Text("Months").tag(OverviewGrouping.months)
-                        Text("Years").tag(OverviewGrouping.years)
+            HStack(alignment: .center, spacing: 16) {
+                HStack(alignment: .center, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("From")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        DatePicker("", selection: $from, displayedComponents: .date)
+                            .labelsHidden()
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("To")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        DatePicker("", selection: $to, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Grouping")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $grouping) {
+                            Text("Auto").tag(OverviewGrouping.auto)
+                            Text("Hours").tag(OverviewGrouping.hours)
+                            Text("Days").tag(OverviewGrouping.days)
+                            Text("Months").tag(OverviewGrouping.months)
+                            Text("Years").tag(OverviewGrouping.years)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                    }
                 }
+                Spacer(minLength: 0)
                 Button("Apply") {
                     Task { await load() }
                 }
@@ -156,9 +159,11 @@ struct StatisticsPageView: View {
     }
 
     private var chartSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("User activity & traffic")
                 .font(.headline)
+                .padding(.top, 8)
+                .padding(.bottom, 18)
             if isLoading {
                 ProgressView()
                     .frame(height: 280)
@@ -369,6 +374,12 @@ private struct StatCard: View {
 
 private struct OverviewChartView: View {
     let data: [ChartPoint]
+    @State private var selectedLabel: String?
+
+    private var selectedPoint: ChartPoint? {
+        guard let label = selectedLabel else { return nil }
+        return data.first { $0.label == label }
+    }
 
     var body: some View {
         if data.isEmpty {
@@ -401,8 +412,14 @@ private struct OverviewChartView: View {
                         )
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
+                        if let sel = selectedLabel, sel == point.label {
+                            RuleMark(x: .value("Time", point.label))
+                                .foregroundStyle(.blue.opacity(0.5))
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
+                        }
                     }
-                    .frame(height: 120)
+                    .chartXSelection(value: $selectedLabel)
+                    .frame(height: 138)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Traffic (MB)")
@@ -427,11 +444,39 @@ private struct OverviewChartView: View {
                         )
                         .foregroundStyle(.green)
                         .interpolationMethod(.catmullRom)
+                        if let sel = selectedLabel, sel == point.label {
+                            RuleMark(x: .value("Time", point.label))
+                                .foregroundStyle(.green.opacity(0.5))
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
+                        }
                     }
-                    .frame(height: 120)
+                    .chartXSelection(value: $selectedLabel)
+                    .frame(height: 138)
                 }
+
+                ZStack(alignment: .leading) {
+                    Color.clear
+                        .frame(height: 28)
+                    if let point = selectedPoint {
+                        HStack(spacing: 16) {
+                            Text(point.label)
+                                .fontWeight(.medium)
+                            Text("Sessions: \(point.active)")
+                                .foregroundStyle(.blue)
+                            Text("Traffic: \(point.mb) MB")
+                                .foregroundStyle(.green)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.primary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+                .frame(height: 28)
+                .padding(.bottom, 12)
             }
-            .frame(height: 280)
+            .frame(height: 330)
         }
     }
 }
