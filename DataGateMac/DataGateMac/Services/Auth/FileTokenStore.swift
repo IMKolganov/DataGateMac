@@ -18,11 +18,18 @@ final class FileTokenStore {
     func load() throws -> AuthTokensResponse? {
         guard FileManager.default.fileExists(atPath: path.path) else { return nil }
         let data = try Data(contentsOf: path)
-        return try JSONDecoder().decode(AuthTokensResponse.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(AuthTokensResponse.self, from: data)
     }
 
     func save(_ tokens: AuthTokensResponse) throws {
-        let data = try JSONEncoder().encode(tokens)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var c = encoder.singleValueContainer()
+            try? c.encode(date.timeIntervalSince1970)
+        }
+        let data = try encoder.encode(tokens)
         try data.write(to: path)
     }
 

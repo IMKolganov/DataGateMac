@@ -16,7 +16,7 @@ struct RootView: View {
                 ProgressView("Checking authorization…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if authState.isAuthorized {
-                ContentView()
+                MainView(authState: authState)
             } else {
                 LoginView(authState: authState)
             }

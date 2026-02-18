@@ -43,4 +43,9 @@ final class AuthStateStore: ObservableObject {
         try? session.logout()
         isAuthorized = false
     }
+
+    /// Returns valid access token (refreshes if expired). Used by API clients.
+    func getValidAccessToken() async -> String? {
+        await session.getValidAccessToken()
+    }
 }
