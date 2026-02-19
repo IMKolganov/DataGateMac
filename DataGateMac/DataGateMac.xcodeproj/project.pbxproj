@@ -6,8 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DA5124C02F2F807100C61F86 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA5124C12F2F807100C61F86 /* NetworkExtension.framework */; };
+		DA5124D02F2F807100C61F86 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */; };
+		DA5124D12F2F807100C61F86 /* DataGateMacPacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DA5124DB2F2F807100C61F86 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA5124C12F2F807100C61F86 /* NetworkExtension.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		DA5124A92F2F807100C61F86 /* DataGateMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DataGateMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA5124C12F2F807100C61F86 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		DA5124D32F2F807100C61F86 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DataGateMacPacketTunnel.entitlements; sourceTree = "<group>"; };
+		DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DataGateMacPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -18,11 +30,34 @@
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DA5124DC2F2F807100C61F86 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DA5124D12F2F807100C61F86 /* DataGateMacPacketTunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFrameworksBuildPhase section */
 		DA5124A62F2F807100C61F86 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA5124C02F2F807100C61F86 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA5124D72F2F807100C61F86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA5124DB2F2F807100C61F86 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				DA5124AB2F2F807100C61F86 /* DataGateMac */,
+				DA5124D62F2F807100C61F86 /* DataGateMacPacketTunnel */,
 				DA5124AA2F2F807100C61F86 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +77,19 @@
 			isa = PBXGroup;
 			children = (
 				DA5124A92F2F807100C61F86 /* DataGateMac.app */,
+				DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DA5124D62F2F807100C61F86 /* DataGateMacPacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */,
+				DA5124D32F2F807100C61F86 /* Info.plist */,
+				DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */,
+			);
+			path = DataGateMacPacketTunnel;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +102,12 @@
 				DA5124A52F2F807100C61F86 /* Sources */,
 				DA5124A62F2F807100C61F86 /* Frameworks */,
 				DA5124A72F2F807100C61F86 /* Resources */,
+				DA5124DC2F2F807100C61F86 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DA5124DE2F2F807100C61F86 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DA5124AB2F2F807100C61F86 /* DataGateMac */,
@@ -70,7 +119,42 @@
 			productReference = DA5124A92F2F807100C61F86 /* DataGateMac.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DA5124DA2F2F807100C61F86 /* DataGateMacPacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DA5124DF2F2F807100C61F86 /* Build configuration list for PBXNativeTarget "DataGateMacPacketTunnel" */;
+			buildPhases = (
+				DA5124D82F2F807100C61F86 /* Sources */,
+				DA5124D72F2F807100C61F86 /* Frameworks */,
+				DA5124D92F2F807100C61F86 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DataGateMacPacketTunnel;
+			productName = DataGateMacPacketTunnel;
+			productReference = DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DA5124A12F2F807100C61F86 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DA5124DA2F2F807100C61F86;
+			remoteInfo = DataGateMacPacketTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		DA5124DE2F2F807100C61F86 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DA5124DA2F2F807100C61F86 /* DataGateMacPacketTunnel */;
+			targetProxy = DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		DA5124A12F2F807100C61F86 /* Project object */ = {
@@ -81,6 +165,9 @@
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					DA5124A82F2F807100C61F86 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					DA5124DA2F2F807100C61F86 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -100,12 +187,20 @@
 			projectRoot = "";
 			targets = (
 				DA5124A82F2F807100C61F86 /* DataGateMac */,
+				DA5124DA2F2F807100C61F86 /* DataGateMacPacketTunnel */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		DA5124A72F2F807100C61F86 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA5124D92F2F807100C61F86 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -119,6 +214,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA5124D82F2F807100C61F86 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA5124D02F2F807100C61F86 /* PacketTunnelProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,6 +414,52 @@
 			};
 			name = Release;
 		};
+		DA5124E02F2F807400C61F86 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB28BRDVNP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DA5124E12F2F807400C61F86 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB28BRDVNP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -328,6 +477,15 @@
 			buildConfigurations = (
 				DA5124B52F2F807400C61F86 /* Debug */,
 				DA5124B62F2F807400C61F86 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DA5124DF2F2F807100C61F86 /* Build configuration list for PBXNativeTarget "DataGateMacPacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA5124E02F2F807400C61F86 /* Debug */,
+				DA5124E12F2F807400C61F86 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
