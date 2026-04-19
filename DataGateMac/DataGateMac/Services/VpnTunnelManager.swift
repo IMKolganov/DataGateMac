@@ -138,6 +138,7 @@ struct TunnelConfig: Sendable {
             serverId: dictionary["serverId"] as? Int
         )
     }
+
 }
 
 /// Localized description for tunnel disconnect errors (shown in UI status).
@@ -363,7 +364,13 @@ final class VpnTunnelManager: ObservableObject {
             return try await setConfiguration(config)
         }
         guard let proto = manager.protocolConfiguration as? NETunnelProviderProtocol else { return }
-        proto.providerConfiguration = config.toProviderConfiguration()
+        let nextConfig = config.toProviderConfiguration()
+        let currentConfig = proto.providerConfiguration ?? [:]
+        if NSDictionary(dictionary: currentConfig).isEqual(to: nextConfig) {
+            onLog?("[Tunnel] Step: config unchanged; skip saveToPreferences().")
+            return
+        }
+        proto.providerConfiguration = nextConfig
         manager.protocolConfiguration = proto
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             manager.saveToPreferences { error in

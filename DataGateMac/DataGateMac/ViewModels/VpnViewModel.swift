@@ -14,6 +14,7 @@ final class VpnViewModel: ObservableObject {
     private enum ConnectFlowError: LocalizedError {
         case unauthorized
         case backendConfigUnavailable
+        case tunnelBuild(TunnelConfigBuildError)
 
         var errorDescription: String? {
             switch self {
@@ -21,8 +22,15 @@ final class VpnViewModel: ObservableObject {
                 return L10n.tr("vpn_flow_sign_in_again", "Sign in again before connecting.")
             case .backendConfigUnavailable:
                 return L10n.tr("vpn_flow_backend_unavailable", "Could not build VPN configuration from the backend.")
+            case .tunnelBuild(let e):
+                return e.errorDescription
             }
         }
+    }
+
+    private enum HomeVpnPrefs {
+        static let autoKey = "imkolganov.DataGateMac.homeVpnServerPickAutomatic"
+        static let manualIdKey = "imkolganov.DataGateMac.homeVpnManualServerId"
     }
 
     @Published var isConnected: Bool = false
@@ -38,10 +46,21 @@ final class VpnViewModel: ObservableObject {
     @Published var showVpnProfileResetSuggestion = false
     /// One-shot alert after a configuration error; dismissing it keeps `showVpnProfileResetSuggestion` true.
     @Published var showVpnProfileResetAlert = false
+    /// WSS servers for Home picker (refreshed from the same API as connect).
+    @Published var vpnServerRows: [HomeVpnServerRow] = []
+    @Published var isRefreshingServerList = false
+    @Published var serverListBanner: String = ""
+    /// `true` = automatic best server (Linux/Win-style). `false` = user-selected `manualServerId`.
+    @Published var serverPickAutomatic = true
+    @Published var manualServerId: Int = 0
 
     private let tunnelManager = VpnTunnelManager()
     private var extensionLogPollTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+    /// Reading the shared App Group container from the host app triggers
+    /// macOS "access data from other apps" prompts on some systems.
+    /// Keep automatic reads off by default; use Console/shared file only when needed.
+    private let autoReadExtensionLogsFromAppGroup = false
     /// True while loadOrCreateConfiguration / setConfiguration is in progress.
     private var isPreparing: Bool = false
     /// True from Connect tap until startTunnel() has been called (or failed). Prevents multiple connect taps.
@@ -51,9 +70,12 @@ final class VpnViewModel: ObservableObject {
     private var languageChangeObserver: NSObjectProtocol?
     /// When set, Connect uses backend (server list + OVPN file). When nil, uses placeholder config.
     private weak var authState: AuthStateStore?
+    private var homeVpnPrefsLoaded = false
 
     init(authState: AuthStateStore? = nil) {
         self.authState = authState
+        loadHomeVpnPrefsFromDefaults()
+        homeVpnPrefsLoaded = true
         tunnelManager.onLog = { [weak self] msg in self?.appendLog(msg) }
         tunnelManager.$status
             .receive(on: DispatchQueue.main)
@@ -82,6 +104,11 @@ final class VpnViewModel: ObservableObject {
     }
 
     private func startExtensionLogPolling() {
+        guard autoReadExtensionLogsFromAppGroup else {
+            extensionLogPollTimer?.invalidate()
+            extensionLogPollTimer = nil
+            return
+        }
         extensionLogPollTimer?.invalidate()
         extensionLogPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.refreshExtensionLog()
@@ -90,6 +117,10 @@ final class VpnViewModel: ObservableObject {
     }
 
     private func refreshExtensionLog() {
+        guard autoReadExtensionLogsFromAppGroup else {
+            extensionLogText = ""
+            return
+        }
         // Avoid reading the App Group from the host while idle or connecting — macOS 15+ may prompt
         // ("…access data from other apps") on each container access when the profile does not fully authorize the group.
         let s = tunnelManager.status
@@ -110,7 +141,11 @@ final class VpnViewModel: ObservableObject {
 
     /// Matches Windows home: Connect only when idle / disconnected; not while busy or already tunneling.
     var canTapConnect: Bool {
-        !isBusy && !tunnelManager.isConnectingOrConnected
+        guard !isBusy && !tunnelManager.isConnectingOrConnected else { return false }
+        if !serverPickAutomatic {
+            return vpnServerRows.contains(where: { $0.id == manualServerId })
+        }
+        return true
     }
 
     /// Disconnect when connected or reasserting; disabled while connecting/disconnecting or other busy work.
@@ -143,6 +178,59 @@ final class VpnViewModel: ObservableObject {
         }
         isPreparing = false
         syncFromTunnel()
+        await refreshServerList()
+    }
+
+    func refreshServerList() async {
+        guard let auth = authState else {
+            vpnServerRows = []
+            serverListBanner = ""
+            return
+        }
+        guard let token = await auth.getValidAccessToken() else {
+            vpnServerRows = []
+            serverListBanner = L10n.tr("home_server_list_need_sign_in", "Sign in to load the server list.")
+            return
+        }
+        isRefreshingServerList = true
+        serverListBanner = ""
+        defer { isRefreshingServerList = false }
+        do {
+            let servers = try await OpenVpnServersApiClient.shared.getAllWithStatus(token: token)
+            vpnServerRows = TunnelConfigBuilder.homeRows(from: servers)
+            normalizeManualServerSelection()
+            if vpnServerRows.isEmpty {
+                serverListBanner = L10n.tr("home_server_list_empty", "No WSS-enabled servers returned for your account.")
+            }
+        } catch {
+            serverListBanner = error.localizedDescription
+        }
+    }
+
+    private func loadHomeVpnPrefsFromDefaults() {
+        if UserDefaults.standard.object(forKey: HomeVpnPrefs.autoKey) != nil {
+            serverPickAutomatic = UserDefaults.standard.bool(forKey: HomeVpnPrefs.autoKey)
+        }
+        let m = UserDefaults.standard.integer(forKey: HomeVpnPrefs.manualIdKey)
+        if m > 0 {
+            manualServerId = m
+        }
+    }
+
+    private func persistHomeVpnPrefs() {
+        guard homeVpnPrefsLoaded else { return }
+        UserDefaults.standard.set(serverPickAutomatic, forKey: HomeVpnPrefs.autoKey)
+        UserDefaults.standard.set(manualServerId, forKey: HomeVpnPrefs.manualIdKey)
+    }
+
+    /// After loading `vpnServerRows`, keep manual selection valid for the picker.
+    private func normalizeManualServerSelection() {
+        let ids = Set(vpnServerRows.map(\.id))
+        if serverPickAutomatic { return }
+        if manualServerId == 0 || !ids.contains(manualServerId), let first = vpnServerRows.first {
+            manualServerId = first.id
+            persistHomeVpnPrefs()
+        }
     }
 
     func connect() {
@@ -163,18 +251,28 @@ final class VpnViewModel: ObservableObject {
                 let config: TunnelConfig
                 if let auth = authState, let token = await auth.getValidAccessToken() {
                     appendLog("[Connect flow] Step 2: build config from backend (TunnelConfigBuilder)...")
-                    if let backendConfig = await TunnelConfigBuilder.build(token: token, onLog: { [weak self] msg in self?.appendLog(msg) }) {
-                        config = backendConfig
+                    let pick: TunnelServerPick = serverPickAutomatic
+                        ? .automatic
+                        : .manual(serverId: manualServerId)
+                    do {
+                        config = try await TunnelConfigBuilder.build(
+                            token: token,
+                            serverPick: pick,
+                            onLog: { [weak self] msg in self?.appendLog(msg) }
+                        )
                         appendLog("[Connect flow] Step 2: using backend config \(config.host):\(config.port)")
-                    } else {
-                        appendLog("[Connect flow] Step 2 FAIL: backend did not return a usable tunnel config.")
+                    } catch let e as TunnelConfigBuildError {
+                        appendLog("[Connect flow] Step 2 FAIL: \(e.localizedDescription)")
+                        throw ConnectFlowError.tunnelBuild(e)
+                    } catch {
+                        appendLog("[Connect flow] Step 2 FAIL: \(error.localizedDescription)")
                         throw ConnectFlowError.backendConfigUnavailable
                     }
                 } else {
                     appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
                     throw ConnectFlowError.unauthorized
                 }
-                appendLog("[Connect flow] Step 3: setConfiguration + reload + startTunnel...")
+                appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
                 activeTunnelSummary = "\(config.serverDisplayName) · \(config.host):\(config.port)"
                 try await tunnelManager.setConfiguration(config)
                 try await tunnelManager.reloadFromPreferences()
@@ -182,6 +280,10 @@ final class VpnViewModel: ObservableObject {
                 appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
                 showVpnProfileResetSuggestion = false
                 showVpnProfileResetAlert = false
+            } catch let flow as ConnectFlowError {
+                activeTunnelSummary = ""
+                appendLog("[Connect flow] FAIL: \(flow.errorDescription ?? "Unknown error")")
+                tunnelManager.stopTunnel()
             } catch {
                 activeTunnelSummary = ""
                 appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_updating_config", "updating VPN configuration")))")
@@ -192,6 +294,19 @@ final class VpnViewModel: ObservableObject {
                 tunnelManager.stopTunnel()
             }
         }
+    }
+
+    func updateServerPickAutomatic(_ value: Bool) {
+        serverPickAutomatic = value
+        persistHomeVpnPrefs()
+        if !value {
+            normalizeManualServerSelection()
+        }
+    }
+
+    func updateManualServerId(_ value: Int) {
+        manualServerId = value
+        persistHomeVpnPrefs()
     }
 
     func disconnect() {

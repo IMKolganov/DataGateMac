@@ -26,6 +26,61 @@ struct HomePageView: View {
                     .font(.system(size: 20, weight: .semibold))
 
                 homeCard {
+                    Text(L10n.tr("home_server_section", "VPN server"))
+                        .fontWeight(.semibold)
+                    Text(L10n.tr("home_server_section_hint", "Choose a specific location or let the app pick the best available server (same idea as DataGate on Windows and Linux)."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: Binding(
+                        get: { vm.serverPickAutomatic },
+                        set: { vm.updateServerPickAutomatic($0) }
+                    )) {
+                        Text(L10n.tr("home_server_mode_auto", "Best available")).tag(true)
+                        Text(L10n.tr("home_server_mode_manual", "Choose server…")).tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(!authState.isAuthorized)
+
+                    if !vm.serverPickAutomatic {
+                        if vm.vpnServerRows.isEmpty {
+                            Text(L10n.tr("home_server_manual_need_list", "Load the server list with Refresh, then pick a server."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker(L10n.tr("home_server_pick_label", "Server"), selection: Binding(
+                                get: { vm.manualServerId },
+                                set: { vm.updateManualServerId($0) }
+                            )) {
+                                ForEach(vm.vpnServerRows) { row in
+                                    Text(homeServerRowLabel(row)).tag(row.id)
+                                }
+                            }
+                            .disabled(!authState.isAuthorized)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        Button(L10n.tr("home_server_refresh", "Refresh list")) {
+                            Task { await vm.refreshServerList() }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!authState.isAuthorized || vm.isRefreshingServerList)
+                        if vm.isRefreshingServerList {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.top, 2)
+
+                    if !vm.serverListBanner.isEmpty {
+                        Text(vm.serverListBanner)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                homeCard {
                     Text(L10n.tr("home_conn_status", "Connection status"))
                         .fontWeight(.semibold)
                     Text(vm.statusText)
@@ -118,6 +173,15 @@ struct HomePageView: View {
         } message: {
             Text(L10n.tr("home_alert_reset_msg", "macOS blocked updating the VPN configuration (often error 5 or permission denied). Removing the in-app DataGate profile and trying Connect again usually fixes it. You can also use System Settings → VPN."))
         }
+    }
+
+    private func homeServerRowLabel(_ row: HomeVpnServerRow) -> String {
+        let load = L10n.trFormat("home_server_clients_fmt", "%d clients", row.clientCount)
+        var base = "\(row.displayName) · \(load)"
+        if !row.isOnline {
+            base += L10n.tr("home_server_offline_suffix", " (offline)")
+        }
+        return base
     }
 
     private func homeCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
