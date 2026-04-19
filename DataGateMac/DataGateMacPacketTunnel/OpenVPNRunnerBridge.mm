@@ -126,16 +126,16 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
         : bridge_(bridge), logHandler_(logHandler) {}
 
     bool pause_on_connection_timeout() override {
-        logLine(@"[OpenVPN3] pause_on_connection_timeout -> false");
+        logLine(@"[Engine] pause_on_connection_timeout -> false");
         return false;
     }
 
     void event(const openvpn::ClientAPI::Event &ev) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] event: %@ (%@)", ToNSString(ev.name), ToNSString(ev.info)]);
+        logLine([NSString stringWithFormat:@"[Engine] event: %@ (%@)", ToNSString(ev.name), ToNSString(ev.info)]);
     }
 
     void acc_event(const openvpn::ClientAPI::AppCustomControlMessageEvent &ev) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] acc_event: protocol=%@ payload=%@",
+        logLine([NSString stringWithFormat:@"[Engine] acc_event: protocol=%@ payload=%@",
                                                ToNSString(ev.protocol),
                                                ToNSString(ev.payload)]);
     }
@@ -148,34 +148,34 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
                 return;
             }
         }
-        logLine([NSString stringWithFormat:@"[OpenVPN3] log: %@", text]);
+        logLine([NSString stringWithFormat:@"[Engine] log: %@", text]);
     }
 
     void external_pki_cert_request(openvpn::ClientAPI::ExternalPKICertRequest &req) override {
         req.error = true;
         req.errorText = "External PKI is not implemented in DataGateMacPacketTunnel";
-        logLine(@"[OpenVPN3] external_pki_cert_request: not implemented");
+        logLine(@"[Engine] external_pki_cert_request: not implemented");
     }
 
     void external_pki_sign_request(openvpn::ClientAPI::ExternalPKISignRequest &req) override {
         req.error = true;
         req.errorText = "External PKI is not implemented in DataGateMacPacketTunnel";
-        logLine(@"[OpenVPN3] external_pki_sign_request: not implemented");
+        logLine(@"[Engine] external_pki_sign_request: not implemented");
     }
 
     bool tun_builder_new() override {
         [bridge_ openvpnTunBuilderReset];
-        logLine(@"[OpenVPN3] tun_builder_new()");
+        logLine(@"[Engine] tun_builder_new()");
         return true;
     }
 
     bool tun_builder_set_layer(int layer) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_layer(%d)", layer]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_layer(%d)", layer]);
         return layer == 3;
     }
 
     bool tun_builder_set_remote_address(const std::string &address, bool ipv6) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_remote_address(%@, ipv6=%@)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_remote_address(%@, ipv6=%@)",
                                            ToNSString(address),
                                            ipv6 ? @"true" : @"false"]);
         return true;
@@ -191,7 +191,7 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
                                         prefixLength:prefix_length
                                              gateway:ToNSString(gateway)];
         }
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_add_address(%@/%d, gw=%@, ipv6=%@, net30=%@)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_add_address(%@/%d, gw=%@, ipv6=%@, net30=%@)",
                                            ToNSString(address),
                                            prefix_length,
                                            ToNSString(gateway),
@@ -201,13 +201,13 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
     }
 
     bool tun_builder_set_route_metric_default(int metric) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_route_metric_default(%d)", metric]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_route_metric_default(%d)", metric]);
         return true;
     }
 
     bool tun_builder_reroute_gw(bool ipv4, bool ipv6, unsigned int flags) override {
         [bridge_ openvpnTunBuilderSetRerouteGwIpv4:ipv4 ipv6:ipv6 flags:flags];
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_reroute_gw(ipv4=%@, ipv6=%@, flags=%u)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_reroute_gw(ipv4=%@, ipv6=%@, flags=%u)",
                                            ipv4 ? @"true" : @"false",
                                            ipv6 ? @"true" : @"false",
                                            flags]);
@@ -218,7 +218,7 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
                                int prefix_length,
                                int metric,
                                bool ipv6) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_add_route(%@/%d, metric=%d, ipv6=%@)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_add_route(%@/%d, metric=%d, ipv6=%@)",
                                            ToNSString(address),
                                            prefix_length,
                                            metric,
@@ -233,7 +233,7 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
         if (!ipv6) {
             [bridge_ openvpnTunBuilderAppendExcludedIpv4:ToNSString(address) prefixLength:prefix_length];
         }
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_exclude_route(%@/%d, metric=%d, ipv6=%@)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_exclude_route(%@/%d, metric=%d, ipv6=%@)",
                                            ToNSString(address),
                                            prefix_length,
                                            metric,
@@ -255,7 +255,7 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
             }
         }
         [bridge_ openvpnTunBuilderReplaceDnsIpv4Servers:ipv4Servers];
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_dns_options(servers=%lu, search=%lu)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_dns_options(servers=%lu, search=%lu)",
                                            (unsigned long)dns.servers.size(),
                                            (unsigned long)dns.search_domains.size()]);
         return true;
@@ -263,55 +263,55 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
 
     bool tun_builder_set_mtu(int mtu) override {
         [bridge_ openvpnTunBuilderSetMtuValue:mtu];
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_mtu(%d)", mtu]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_mtu(%d)", mtu]);
         return true;
     }
 
     bool tun_builder_set_session_name(const std::string &name) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_session_name(%@)", ToNSString(name)]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_session_name(%@)", ToNSString(name)]);
         return true;
     }
 
     bool tun_builder_add_proxy_bypass(const std::string &bypass_host) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_add_proxy_bypass(%@)", ToNSString(bypass_host)]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_add_proxy_bypass(%@)", ToNSString(bypass_host)]);
         return true;
     }
 
     bool tun_builder_set_proxy_auto_config_url(const std::string &url) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_proxy_auto_config_url(%@)", ToNSString(url)]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_proxy_auto_config_url(%@)", ToNSString(url)]);
         return true;
     }
 
     bool tun_builder_set_proxy_http(const std::string &host, int port) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_proxy_http(%@:%d)", ToNSString(host), port]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_proxy_http(%@:%d)", ToNSString(host), port]);
         return true;
     }
 
     bool tun_builder_set_proxy_https(const std::string &host, int port) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_proxy_https(%@:%d)", ToNSString(host), port]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_proxy_https(%@:%d)", ToNSString(host), port]);
         return true;
     }
 
     bool tun_builder_add_wins_server(const std::string &address) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_add_wins_server(%@)", ToNSString(address)]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_add_wins_server(%@)", ToNSString(address)]);
         return true;
     }
 
     bool tun_builder_set_allow_family(int af, bool allow) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_allow_family(af=%d, allow=%@)",
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_allow_family(af=%d, allow=%@)",
                                            af,
                                            allow ? @"true" : @"false"]);
         return true;
     }
 
     bool tun_builder_set_allow_local_dns(bool allow) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_set_allow_local_dns(%@)", allow ? @"true" : @"false"]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_set_allow_local_dns(%@)", allow ? @"true" : @"false"]);
         return true;
     }
 
     int tun_builder_establish() override {
         const int fd = [bridge_ openvpnTunEstablishSocketPair];
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_establish() -> %d (socketpair relay to NEPacketTunnelFlow)", fd]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_establish() -> %d (socketpair relay to NEPacketTunnelFlow)", fd]);
         return fd;
     }
 
@@ -320,7 +320,7 @@ class PacketTunnelOpenVPNClient final : public openvpn::ClientAPI::OpenVPNClient
     }
 
     void tun_builder_teardown(bool disconnect) override {
-        logLine([NSString stringWithFormat:@"[OpenVPN3] tun_builder_teardown(disconnect=%@)", disconnect ? @"true" : @"false"]);
+        logLine([NSString stringWithFormat:@"[Engine] tun_builder_teardown(disconnect=%@)", disconnect ? @"true" : @"false"]);
         [bridge_ openvpnTunTeardown];
     }
 
@@ -448,7 +448,7 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
         [frame appendData:ip];
         if (!OpenVPNDatagramSendWithPollWait(peer, frame.bytes, frame.length)) {
             if (_logHandler && [self allowSocketPressureLog]) {
-                _logHandler([NSString stringWithFormat:@"[OpenVPN3] inject send failed errno=%d", errno]);
+                _logHandler([NSString stringWithFormat:@"[Engine] inject send failed errno=%d", errno]);
             }
             break;
         }
@@ -463,14 +463,14 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
         }
         if (!_packetFlow) {
             if (_logHandler) {
-                _logHandler(@"[OpenVPN3] tun_builder_establish: packetFlow is nil; call setPacketFlow before start");
+                _logHandler(@"[Engine] tun_builder_establish: packetFlow is nil; call setPacketFlow before start");
             }
             return -1;
         }
         int sp[2];
         if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sp) != 0) {
             if (_logHandler) {
-                _logHandler([NSString stringWithFormat:@"[OpenVPN3] socketpair failed errno=%d", errno]);
+                _logHandler([NSString stringWithFormat:@"[Engine] socketpair failed errno=%d", errno]);
             }
             return -1;
         }
@@ -649,13 +649,13 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
     }
     if (!hasIpv4 || addr.length == 0 || mask.length == 0) {
         if (_logHandler) {
-            _logHandler(@"[OpenVPN3] NE update skipped: no IPv4 address from server push");
+            _logHandler(@"[Engine] NE update skipped: no IPv4 address from server push");
         }
         return;
     }
     if (!handlerCopy) {
         if (_logHandler) {
-            _logHandler(@"[OpenVPN3] NE update skipped: networkSettingsUpdateHandler is nil");
+            _logHandler(@"[Engine] NE update skipped: networkSettingsUpdateHandler is nil");
         }
         return;
     }
@@ -681,7 +681,7 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
         }
     }
     if (_logHandler) {
-        _logHandler([NSString stringWithFormat:@"[OpenVPN3] posting NE settings: client=%@/%@ gw=%@ rerouteGwIpv4=%@ excludedRoutes=%lu dnsServers=%lu wssExcludeHost=%@",
+        _logHandler([NSString stringWithFormat:@"[Engine] posting NE settings: client=%@/%@ gw=%@ rerouteGwIpv4=%@ excludedRoutes=%lu dnsServers=%lu wssExcludeHost=%@",
                                                addr,
                                                mask,
                                                gateway,
@@ -723,7 +723,7 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
 
     const openvpn::ClientAPI::EvalConfig eval = _client->eval_config(config);
     if (eval.error) {
-        NSString *message = [NSString stringWithUTF8String:eval.message.c_str()] ?: @"OpenVPN3 eval_config failed.";
+        NSString *message = [NSString stringWithUTF8String:eval.message.c_str()] ?: @"VPN engine eval_config failed.";
         if (error) {
             *error = OpenVPNRunnerError(2, message);
         }
@@ -737,9 +737,9 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
         const NSString *remoteHost = [NSString stringWithUTF8String:eval.remoteHost.c_str()] ?: @"";
         const NSString *remotePort = [NSString stringWithUTF8String:eval.remotePort.c_str()] ?: @"";
         const NSString *remoteProto = [NSString stringWithUTF8String:eval.remoteProto.c_str()] ?: @"";
-        _logHandler([NSString stringWithFormat:@"[OpenVPN3] platform=%@", platform]);
-        _logHandler([NSString stringWithFormat:@"[OpenVPN3] eval_config OK: remote=%@:%@ proto=%@", remoteHost, remotePort, remoteProto]);
-        _logHandler([NSString stringWithFormat:@"[OpenVPN3] eval_config auth: autologin=%@ externalPki=%@ profile=%@",
+        _logHandler([NSString stringWithFormat:@"[Engine] platform=%@", platform]);
+        _logHandler([NSString stringWithFormat:@"[Engine] eval_config OK: remote=%@:%@ proto=%@", remoteHost, remotePort, remoteProto]);
+        _logHandler([NSString stringWithFormat:@"[Engine] eval_config auth: autologin=%@ externalPki=%@ profile=%@",
                                                eval.autologin ? @"true" : @"false",
                                                eval.externalPki ? @"true" : @"false",
                                                ToNSString(eval.profileName)]);
@@ -751,33 +751,33 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
 - (void)start {
     if (!_prepared) {
         if (_logHandler) {
-            _logHandler(@"[OpenVPN3] start skipped: prepare() was not called");
+            _logHandler(@"[Engine] start skipped: prepare() was not called");
         }
         return;
     }
     if (_connectRunning.exchange(true)) {
         if (_logHandler) {
-            _logHandler(@"[OpenVPN3] start skipped: connect() already running");
+            _logHandler(@"[Engine] start skipped: connect() already running");
         }
         return;
     }
 
     if (!_evalConfig.autologin) {
         if (_logHandler) {
-            _logHandler(@"[OpenVPN3] connect() not started: profile requires credentials and provide_creds() is not wired yet");
+            _logHandler(@"[Engine] connect() not started: profile requires credentials and provide_creds() is not wired yet");
         }
         _connectRunning = false;
         return;
     }
 
     if (_logHandler) {
-        _logHandler(@"[OpenVPN3] starting connect() on worker thread");
+        _logHandler(@"[Engine] starting connect() on worker thread");
     }
     OpenVPNRunnerBridge *bridge = self;
     _connectThread = std::make_unique<std::thread>([bridge] {
         const openvpn::ClientAPI::Status status = bridge->_client->connect();
         if (bridge->_logHandler) {
-            bridge->_logHandler([NSString stringWithFormat:@"[OpenVPN3] connect() finished: error=%@ status=%@ message=%@",
+            bridge->_logHandler([NSString stringWithFormat:@"[Engine] connect() finished: error=%@ status=%@ message=%@",
                                                            status.error ? @"true" : @"false",
                                                            ToNSString(status.status),
                                                            ToNSString(status.message)]);

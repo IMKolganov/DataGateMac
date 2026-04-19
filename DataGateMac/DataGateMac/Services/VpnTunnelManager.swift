@@ -98,9 +98,12 @@ struct TunnelConfig: Sendable {
     var listenPort: Int
     var verifyServerCert: Bool
     var linkProtocol: TunnelLinkProtocol
+    /// Backend `serverName` (e.g. country + city); shown in the host app when connected.
+    var serverDisplayName: String
+    var serverId: Int?
 
     func toProviderConfiguration() -> [String: Any] {
-        [
+        var dict: [String: Any] = [
             "host": host,
             "port": port,
             "path": path,
@@ -108,7 +111,12 @@ struct TunnelConfig: Sendable {
             "listenPort": listenPort,
             "verifyServerCert": verifyServerCert,
             "linkProtocol": linkProtocol.rawValue,
+            "serverDisplayName": serverDisplayName,
         ]
+        if let serverId {
+            dict["serverId"] = serverId
+        }
+        return dict
     }
 
     static func from(dictionary: [String: Any]) -> TunnelConfig? {
@@ -117,6 +125,7 @@ struct TunnelConfig: Sendable {
               let path = dictionary["path"] as? String,
               let ovpnContent = dictionary["ovpnContent"] as? String
         else { return nil }
+        let display = (dictionary["serverDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return TunnelConfig(
             host: host,
             port: port,
@@ -124,7 +133,9 @@ struct TunnelConfig: Sendable {
             ovpnContent: ovpnContent,
             listenPort: (dictionary["listenPort"] as? Int) ?? 18080,
             verifyServerCert: (dictionary["verifyServerCert"] as? Bool) ?? false,
-            linkProtocol: TunnelLinkProtocol(rawValue: (dictionary["linkProtocol"] as? String ?? "").lowercased()) ?? .tcp
+            linkProtocol: TunnelLinkProtocol(rawValue: (dictionary["linkProtocol"] as? String ?? "").lowercased()) ?? .tcp,
+            serverDisplayName: display.isEmpty ? host : display,
+            serverId: dictionary["serverId"] as? Int
         )
     }
 }

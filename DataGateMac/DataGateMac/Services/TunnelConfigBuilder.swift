@@ -98,6 +98,8 @@ enum TunnelConfigBuilder {
         let proxyPath = "/api/proxy?mode=\(linkProtocol.proxyMode)"
         step("[Backend] Step 5: done -> \(host):\(port)\(proxyPath)")
 
+        let displayName = server.openVpnServerResponses.openVpnServer.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+
         return TunnelConfig(
             host: host,
             port: port,
@@ -105,7 +107,9 @@ enum TunnelConfigBuilder {
             ovpnContent: ovpnContent,
             listenPort: listenPort,
             verifyServerCert: false,
-            linkProtocol: linkProtocol
+            linkProtocol: linkProtocol,
+            serverDisplayName: displayName.isEmpty ? "Server \(serverId)" : displayName,
+            serverId: serverId
         )
     }
 

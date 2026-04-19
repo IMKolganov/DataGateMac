@@ -18,7 +18,7 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Text("DataGate OpenVPN 3")
+            Text("DataGate")
                 .font(.title)
                 .fontWeight(.semibold)
             Text("Sign in to continue")

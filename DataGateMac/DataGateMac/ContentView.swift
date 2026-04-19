@@ -20,6 +20,13 @@ struct ContentView: View {
                 .font(.callout)
                 .foregroundStyle(vm.isConnected ? .green : .secondary)
 
+            if !vm.activeTunnelSummary.isEmpty {
+                Text(vm.activeTunnelSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
             Button {
                 vm.toggle()
             } label: {

@@ -17,7 +17,7 @@ struct HomePageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Welcome to DataGate OpenVPN 3")
+                Text("Welcome to DataGate")
                     .font(.title2)
                     .fontWeight(.semibold)
 
@@ -26,6 +26,11 @@ struct HomePageView: View {
                         .fontWeight(.semibold)
                     Text(vm.statusText)
                         .foregroundStyle(.secondary)
+                    if !vm.activeTunnelSummary.isEmpty {
+                        Text(vm.activeTunnelSummary)
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                    }
                     HStack(spacing: 12) {
                         Button(vm.isConnected ? "Disconnect" : "Connect") {
                             vm.toggle()

@@ -26,8 +26,11 @@ final class VpnViewModel: ObservableObject {
     }
 
     @Published var isConnected: Bool = false
+    /// True while Connect cannot be tapped again (loading prefs, connect task, or tunnel is connecting / disconnecting). When status is Connected, this is false so Disconnect stays enabled.
     @Published var isBusy: Bool = false
     @Published var statusText: String = "Disconnected"
+    /// Set when a backend tunnel config is applied (server label + WSS endpoint). Cleared when the tunnel is disconnected.
+    @Published var activeTunnelSummary: String = ""
     @Published var logText: String = ""
     /// Log lines written by the packet tunnel extension (read from App Group shared file); polled every second.
     @Published var extensionLogText: String = ""
@@ -143,6 +146,7 @@ final class VpnViewModel: ObservableObject {
                     throw ConnectFlowError.unauthorized
                 }
                 appendLog("[Connect flow] Step 3: setConfiguration + reload + startTunnel...")
+                activeTunnelSummary = "\(config.serverDisplayName) · \(config.host):\(config.port)"
                 try await tunnelManager.setConfiguration(config)
                 try await tunnelManager.reloadFromPreferences()
                 try tunnelManager.startTunnel()
@@ -150,6 +154,7 @@ final class VpnViewModel: ObservableObject {
                 showVpnProfileResetSuggestion = false
                 showVpnProfileResetAlert = false
             } catch {
+                activeTunnelSummary = ""
                 appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorEnglishDescription(error, action: "updating VPN configuration"))")
                 if shouldOfferVpnProfileResetAfterConfigurationError(error) {
                     showVpnProfileResetSuggestion = true
@@ -162,6 +167,7 @@ final class VpnViewModel: ObservableObject {
 
     func disconnect() {
         appendLog("[Connect flow] Disconnect tapped.")
+        activeTunnelSummary = ""
         tunnelManager.stopTunnel()
         syncFromTunnel()
     }
@@ -185,7 +191,8 @@ final class VpnViewModel: ObservableObject {
     private func syncFromTunnel() {
         refreshExtensionLog()
         let current = tunnelManager.status
-        if previousTunnelStatus == .connecting && (current == .disconnected || current == .invalid) && extensionLogText.isEmpty {
+        let oldStatus = previousTunnelStatus
+        if oldStatus == .connecting && (current == .disconnected || current == .invalid) && extensionLogText.isEmpty {
             appendLog("[Connect flow] Tunnel failed (no extension log). Check [Diagnostics] lines above; then Console.app → neagent / networkextensiond while tapping Connect; or run scripts/diagnose-vpn-extension.sh on the .app you actually run.")
         }
         previousTunnelStatus = current
@@ -194,7 +201,19 @@ final class VpnViewModel: ObservableObject {
             statusText += " (\(err))"
         }
         isConnected = tunnelManager.isConnected
-        isBusy = connectInProgress || isPreparing || tunnelManager.isConnectingOrConnected
+        // Do not treat `.connected` (or `.reasserting`) as "busy" for the main button — user must be able to Disconnect.
+        isBusy = connectInProgress
+            || isPreparing
+            || current == .connecting
+            || current == .disconnecting
+        if current == .disconnected || current == .invalid {
+            switch oldStatus {
+            case .connected, .disconnecting, .connecting, .reasserting:
+                activeTunnelSummary = ""
+            default:
+                break
+            }
+        }
     }
 
     func dismissVpnProfileResetAlertOnly() {

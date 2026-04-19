@@ -61,12 +61,12 @@ final class WSSBridge {
     }
 
     func start(completion: @escaping (Error?) -> Void) {
-        ExtensionLogWriter.append("[WSSBridge] plan: OpenVPN -> TCP client \(localListenLabel) -> relay -> WebSocket upstream \(upstreamWssURL) verifyServerCert=\(verifyServerCert)")
+        ExtensionLogWriter.append("[WSSBridge] plan: profile TCP client \(localListenLabel) -> relay -> WebSocket upstream \(upstreamWssURL) verifyServerCert=\(verifyServerCert)")
         guard let nwPort = NWEndpoint.Port(rawValue: listenPort) else {
             completion(NSError(domain: "WSSBridge", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid listen port"]))
             return
         }
-        // Bind explicitly to IPv4 loopback. NWListener(using:.tcp, on: port) can listen on a stack OpenVPN/Asio does not reach from 127.0.0.1.
+        // Bind explicitly to IPv4 loopback. NWListener(using:.tcp, on: port) can listen on a stack the profile client (Asio) does not reach from 127.0.0.1.
         var parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: NWEndpoint.Host("127.0.0.1"), port: nwPort)
