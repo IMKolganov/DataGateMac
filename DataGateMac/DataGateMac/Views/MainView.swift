@@ -69,7 +69,7 @@ struct MainView: View {
             Group {
                 switch selection {
                 case .home:
-                    HomePageView()
+                    HomePageView(authState: authState)
                 case .access:
                     AccessPageView(authState: authState)
                 case .statistics:

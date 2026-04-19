@@ -10,6 +10,7 @@ import Foundation
 final class AuthSession {
     private let store: FileTokenStore
     private let validMargin: TimeInterval = 60
+    private let refreshTimeout: TimeInterval = 15
     private var current: AuthTokensResponse?
     private let lock = NSLock()
     private var refreshTask: Task<AuthTokensResponse?, Never>?
@@ -57,6 +58,11 @@ final class AuthSession {
         lock.unlock()
     }
 
+    private func clearInvalidSession() {
+        try? store.clear()
+        setCurrent(nil)
+    }
+
     private func isAccessValid(_ t: AuthTokensResponse) -> Bool {
         t.expiration > Date().addingTimeInterval(validMargin)
     }
@@ -102,19 +108,30 @@ final class AuthSession {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = (try? JSONEncoder().encode(request))
+        req.timeoutInterval = refreshTimeout
 
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse else { return nil }
-
-        if http.statusCode == 401 || http.statusCode == 403 {
+              let http = resp as? HTTPURLResponse else {
+            clearInvalidSession()
             return nil
         }
-        guard (200...299).contains(http.statusCode) else { return nil }
+
+        if http.statusCode == 401 || http.statusCode == 403 {
+            clearInvalidSession()
+            return nil
+        }
+        guard (200...299).contains(http.statusCode) else {
+            clearInvalidSession()
+            return nil
+        }
 
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard let apiResp = try? decoder.decode(ApiResponse<AuthTokensResponse>.self, from: data),
-              apiResp.success, let newTokens = apiResp.data else { return nil }
+              apiResp.success, let newTokens = apiResp.data else {
+            clearInvalidSession()
+            return nil
+        }
 
         try? store.save(newTokens)
         setCurrent(newTokens)

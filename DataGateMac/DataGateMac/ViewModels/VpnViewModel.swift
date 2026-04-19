@@ -2,20 +2,77 @@
 //  VpnViewModel.swift
 //  DataGateMac
 //
-//  Created by Ivan Kolganov on 01/02/2026.
+//  Uses VpnTunnelManager (Network Extension) for Connect/Disconnect and status.
 //
 
-import Foundation
 import Combine
+import Foundation
+import NetworkExtension
 
 @MainActor
 final class VpnViewModel: ObservableObject {
+    private enum ConnectFlowError: LocalizedError {
+        case unauthorized
+        case backendConfigUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .unauthorized:
+                return "Sign in again before connecting."
+            case .backendConfigUnavailable:
+                return "Could not build VPN configuration from the backend."
+            }
+        }
+    }
+
     @Published var isConnected: Bool = false
     @Published var isBusy: Bool = false
     @Published var statusText: String = "Disconnected"
     @Published var logText: String = ""
+    /// Log lines written by the packet tunnel extension (read from App Group shared file); polled every second.
+    @Published var extensionLogText: String = ""
 
-    private var runner: ProcessRunner?
+    private let tunnelManager = VpnTunnelManager()
+    private var extensionLogPollTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
+    /// True while loadOrCreateConfiguration / setConfiguration is in progress.
+    private var isPreparing: Bool = false
+    /// True from Connect tap until startTunnel() has been called (or failed). Prevents multiple connect taps.
+    private var connectInProgress: Bool = false
+    private var previousTunnelStatus: NEVPNStatus = .invalid
+    private var hasLoggedVpnDiagnostics: Bool = false
+    /// When set, Connect uses backend (server list + OVPN file). When nil, uses placeholder config.
+    private weak var authState: AuthStateStore?
+
+    init(authState: AuthStateStore? = nil) {
+        self.authState = authState
+        tunnelManager.onLog = { [weak self] msg in self?.appendLog(msg) }
+        tunnelManager.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncFromTunnel() }
+            .store(in: &cancellables)
+        tunnelManager.$lastError
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.syncFromTunnel() }
+            .store(in: &cancellables)
+        startExtensionLogPolling()
+    }
+
+    deinit {
+        extensionLogPollTimer?.invalidate()
+    }
+
+    private func startExtensionLogPolling() {
+        extensionLogPollTimer?.invalidate()
+        extensionLogPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.refreshExtensionLog()
+        }
+        RunLoop.main.add(extensionLogPollTimer!, forMode: .common)
+    }
+
+    private func refreshExtensionLog() {
+        extensionLogText = ExtensionLogReader.read()
+    }
 
     func toggle() {
         if isConnected {
@@ -25,70 +82,101 @@ final class VpnViewModel: ObservableObject {
         }
     }
 
+    /// Call once when the UI appears so the tunnel config is ready for Connect.
+    func ensureConfigurationLoaded() async {
+        guard !isPreparing else { return }
+        isPreparing = true
+        if !hasLoggedVpnDiagnostics {
+            hasLoggedVpnDiagnostics = true
+            for line in VpnDiagnostics.buildReport().split(separator: "\n", omittingEmptySubsequences: false) {
+                appendLog(String(line))
+            }
+        }
+        appendLog("[Connect flow] Step 0: ensureConfigurationLoaded - loading tunnel config...")
+        do {
+            try await tunnelManager.loadOrCreateConfiguration()
+            appendLog("[Connect flow] Step 0: tunnel configuration ready.")
+        } catch {
+            appendLog("[Connect flow] Step 0 FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "loading VPN configuration"))")
+        }
+        isPreparing = false
+        syncFromTunnel()
+    }
+
     func connect() {
+        if connectInProgress || tunnelManager.isConnectingOrConnected {
+            return
+        }
+        connectInProgress = true
         isBusy = true
         statusText = "Connecting..."
-        appendLog("UI: connect tapped")
+        ExtensionLogReader.clear()
+        appendLog("[Connect flow] Connect tapped: starting...")
 
-        // 1) Путь к бинарю openvpn3 (CLI).
-        //    Сейчас хардкодим. Позже сделаем настройку.
-        //    Варианты:
-        //    - положить openvpn3 в app bundle (Resources/bin/openvpn3)
-        //    - использовать /usr/local/bin/openvpn3 если ставил через brew/ручную установку
-        let openvpn3Path = "/usr/local/bin/openvpn3"
-
-        // 2) Хардкодим команду. Это пример — конкретные команды зависят от твоего openvpn3.
-        //    Для демонстрации можно запустить любой бинарь и почитать логи.
-        //
-        //    ТИПИЧНЫЙ паттерн:
-        //    - import profile
-        //    - start session
-        //
-        //    Но чтобы не упереться в различия, сначала сделаем "probe":
-        //    openvpn3 version
-        let args = ["version"]
-
-        runner = ProcessRunner(
-            executablePath: openvpn3Path,
-            arguments: args,
-            onOutput: { [weak self] line in
-                Task { @MainActor in self?.appendLog(line) }
-            },
-            onExit: { [weak self] (code: Int32) in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.appendLog("Process exited with code: \(code)")
-                    self.isBusy = false
-
-                    if code == 0 {
-                        self.isConnected = true
-                        self.statusText = "Connected (demo)"
-                        self.appendLog("Demo: marked as connected after successful command.")
+        Task { @MainActor in
+            defer { connectInProgress = false; syncFromTunnel() }
+            do {
+                appendLog("[Connect flow] Step 1: loadOrCreateConfiguration...")
+                try await tunnelManager.loadOrCreateConfiguration()
+                let config: TunnelConfig
+                if let auth = authState, let token = await auth.getValidAccessToken() {
+                    appendLog("[Connect flow] Step 2: build config from backend (TunnelConfigBuilder)...")
+                    if let backendConfig = await TunnelConfigBuilder.build(token: token, onLog: { [weak self] msg in self?.appendLog(msg) }) {
+                        config = backendConfig
+                        appendLog("[Connect flow] Step 2: using backend config \(config.host):\(config.port)")
                     } else {
-                        self.isConnected = false
-                        self.statusText = "Disconnected"
-                        self.appendLog("Failed to run openvpn3. Check path/permissions.")
+                        appendLog("[Connect flow] Step 2 FAIL: backend did not return a usable tunnel config.")
+                        throw ConnectFlowError.backendConfigUnavailable
                     }
+                } else {
+                    appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
+                    throw ConnectFlowError.unauthorized
                 }
+                appendLog("[Connect flow] Step 3: setConfiguration + reload + startTunnel...")
+                try await tunnelManager.setConfiguration(config)
+                try await tunnelManager.reloadFromPreferences()
+                try tunnelManager.startTunnel()
+                appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
+            } catch {
+                appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorEnglishDescription(error, action: "updating VPN configuration"))")
+                tunnelManager.stopTunnel()
             }
-        )
-
-        runner?.start()
+        }
     }
 
     func disconnect() {
+        appendLog("[Connect flow] Disconnect tapped.")
+        tunnelManager.stopTunnel()
+        syncFromTunnel()
+    }
+
+    /// Removes the DataGate VPN entry from preferences so the next Connect creates a fresh profile (often needed after moving the .app to /Applications).
+    func resetVpnProfile() async {
+        appendLog("[Connect flow] Reset VPN profile: removing saved DataGate configuration...")
         isBusy = true
-        statusText = "Disconnecting..."
-        appendLog("UI: disconnect tapped")
+        defer { isBusy = false; syncFromTunnel() }
+        do {
+            try await tunnelManager.removeDataGateFromPreferences()
+            try await tunnelManager.loadOrCreateConfiguration()
+            appendLog("[Connect flow] Reset VPN profile: done. Try Connect again.")
+        } catch {
+            appendLog("[Connect flow] Reset VPN profile FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "resetting VPN configuration"))")
+        }
+    }
 
-        // Для демо: просто останавливаем процесс (если он был долгоживущим).
-        runner?.stop()
-        runner = nil
-
-        isConnected = false
-        statusText = "Disconnected"
-        isBusy = false
-        appendLog("Disconnected (demo).")
+    private func syncFromTunnel() {
+        refreshExtensionLog()
+        let current = tunnelManager.status
+        if previousTunnelStatus == .connecting && (current == .disconnected || current == .invalid) && extensionLogText.isEmpty {
+            appendLog("[Connect flow] Tunnel failed (no extension log). Check [Diagnostics] lines above; then Console.app → neagent / networkextensiond while tapping Connect; or run scripts/diagnose-vpn-extension.sh on the .app you actually run.")
+        }
+        previousTunnelStatus = current
+        statusText = tunnelManager.statusDisplayText
+        if let err = tunnelManager.lastError, !err.isEmpty {
+            statusText += " (\(err))"
+        }
+        isConnected = tunnelManager.isConnected
+        isBusy = connectInProgress || isPreparing || tunnelManager.isConnectingOrConnected
     }
 
     private func appendLog(_ line: String) {

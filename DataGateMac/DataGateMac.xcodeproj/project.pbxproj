@@ -11,24 +11,24 @@
 		DA5124D02F2F807100C61F86 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */; };
 		DA5124D12F2F807100C61F86 /* DataGateMacPacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DA5124DB2F2F807100C61F86 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA5124C12F2F807100C61F86 /* NetworkExtension.framework */; };
+		DA5124E32F2F807100C61F86 /* WSSBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124E22F2F807100C61F86 /* WSSBridge.swift */; };
+		DA5124E52F2F807100C61F86 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA5124E42F2F807100C61F86 /* Network.framework */; };
+		DA5124E62F2F807100C61F86 /* PacketFlowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124E72F2F807100C61F86 /* PacketFlowBridge.swift */; };
+		DA5124F12F2F807100C61F86 /* ExtensionLogWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124F02F2F807100C61F86 /* ExtensionLogWriter.swift */; };
+		DA7F10012FD3022200A1B2C3 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */; };
+		DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */; };
+		DAB100022FD3000100A1B2C3 /* libovpn3-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB100062FD3000100A1B2C3 /* libovpn3-core.a */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXFileReference section */
-		DA5124A92F2F807100C61F86 /* DataGateMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DataGateMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DA5124C12F2F807100C61F86 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
-		DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
-		DA5124D32F2F807100C61F86 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DataGateMacPacketTunnel.entitlements; sourceTree = "<group>"; };
-		DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DataGateMacPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		DA5124AB2F2F807100C61F86 /* DataGateMac */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DataGateMac;
-			sourceTree = "<group>";
+/* Begin PBXContainerItemProxy section */
+		DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DA5124A12F2F807100C61F86 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DA5124DA2F2F807100C61F86;
+			remoteInfo = DataGateMacPacketTunnel;
 		};
-/* End PBXFileSystemSynchronizedRootGroup section */
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		DA5124DC2F2F807100C61F86 /* Embed Foundation Extensions */ = {
@@ -44,6 +44,55 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		DAB1A1AA2FD2B00100A1B2C3 /* Install Debug App to User Applications */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)",
+			);
+			name = "Install Debug App to User Applications";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${PROJECT_DIR}/../scripts/install-debug-app.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXFileReference section */
+		DA5124A92F2F807100C61F86 /* DataGateMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DataGateMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA5124C12F2F807100C61F86 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		DA5124D32F2F807100C61F86 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DataGateMacPacketTunnel.entitlements; sourceTree = "<group>"; };
+		DA5124D52F2F807100C61F86 /* DataGateMacPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DataGateMacPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA5124E22F2F807100C61F86 /* WSSBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSSBridge.swift; sourceTree = "<group>"; };
+		DA5124E42F2F807100C61F86 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
+		DA5124E72F2F807100C61F86 /* PacketFlowBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketFlowBridge.swift; sourceTree = "<group>"; };
+		DA5124F02F2F807100C61F86 /* ExtensionLogWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionLogWriter.swift; sourceTree = "<group>"; };
+		DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		DAB100032FD3000100A1B2C3 /* OpenVPNRunnerBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OpenVPNRunnerBridge.h; sourceTree = "<group>"; };
+		DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OpenVPNRunnerBridge.mm; sourceTree = "<group>"; };
+		DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DataGateMacPacketTunnel-Bridging-Header.h"; sourceTree = "<group>"; };
+		DAB100062FD3000100A1B2C3 /* libovpn3-core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libovpn3-core.a; path = ../build-engine/libovpn3-core.a; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		DA5124AB2F2F807100C61F86 /* DataGateMac */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DataGateMac;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
 		DA5124A62F2F807100C61F86 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -58,6 +107,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA5124DB2F2F807100C61F86 /* NetworkExtension.framework in Frameworks */,
+				DA5124E52F2F807100C61F86 /* Network.framework in Frameworks */,
+				DA7F10012FD3022200A1B2C3 /* SystemConfiguration.framework in Frameworks */,
+				DAB100022FD3000100A1B2C3 /* libovpn3-core.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,6 +122,7 @@
 				DA5124AB2F2F807100C61F86 /* DataGateMac */,
 				DA5124D62F2F807100C61F86 /* DataGateMacPacketTunnel */,
 				DA5124AA2F2F807100C61F86 /* Products */,
+				DA90C0302F478CAA0035B507 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -86,10 +139,27 @@
 			isa = PBXGroup;
 			children = (
 				DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */,
+				DA5124E22F2F807100C61F86 /* WSSBridge.swift */,
+				DA5124E72F2F807100C61F86 /* PacketFlowBridge.swift */,
+				DA5124F02F2F807100C61F86 /* ExtensionLogWriter.swift */,
+				DAB100032FD3000100A1B2C3 /* OpenVPNRunnerBridge.h */,
+				DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */,
+				DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */,
 				DA5124D32F2F807100C61F86 /* Info.plist */,
 				DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */,
 			);
 			path = DataGateMacPacketTunnel;
+			sourceTree = "<group>";
+		};
+		DA90C0302F478CAA0035B507 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				DA5124C12F2F807100C61F86 /* NetworkExtension.framework */,
+				DA5124E42F2F807100C61F86 /* Network.framework */,
+				DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */,
+				DAB100062FD3000100A1B2C3 /* libovpn3-core.a */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -103,6 +173,7 @@
 				DA5124A62F2F807100C61F86 /* Frameworks */,
 				DA5124A72F2F807100C61F86 /* Resources */,
 				DA5124DC2F2F807100C61F86 /* Embed Foundation Extensions */,
+				DAB1A1AA2FD2B00100A1B2C3 /* Install Debug App to User Applications */,
 			);
 			buildRules = (
 			);
@@ -137,24 +208,6 @@
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXContainerItemProxy section */
-		DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = DA5124A12F2F807100C61F86 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = DA5124DA2F2F807100C61F86;
-			remoteInfo = DataGateMacPacketTunnel;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		DA5124DE2F2F807100C61F86 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = DA5124DA2F2F807100C61F86 /* DataGateMacPacketTunnel */;
-			targetProxy = DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		DA5124A12F2F807100C61F86 /* Project object */ = {
@@ -222,10 +275,22 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA5124D02F2F807100C61F86 /* PacketTunnelProvider.swift in Sources */,
+				DA5124E32F2F807100C61F86 /* WSSBridge.swift in Sources */,
+				DA5124E62F2F807100C61F86 /* PacketFlowBridge.swift in Sources */,
+				DA5124F12F2F807100C61F86 /* ExtensionLogWriter.swift in Sources */,
+				DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DA5124DE2F2F807100C61F86 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DA5124DA2F2F807100C61F86 /* DataGateMacPacketTunnel */;
+			targetProxy = DA5124DD2F2F807100C61F86 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		DA5124B22F2F807400C61F86 /* Debug */ = {
@@ -361,7 +426,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -394,7 +459,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -421,17 +486,58 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					ASIO_STANDALONE,
+					USE_ASIO,
+					USE_OPENSSL,
+					HAVE_LZ4,
+					FMT_SHARED,
+					XXH_EXPORT,
+				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../openvpn3",
+					"$(PROJECT_DIR)/../openvpn3/client",
+					"/opt/homebrew/include",
+					"/opt/homebrew/opt/openssl/include",
+				);
 				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../build-engine",
+					"/opt/homebrew/lib",
+					"/opt/homebrew/opt/openssl/lib",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_CPLUSPLUSFLAGS = (
+					"$(inherited)",
+					"-std=gnu++20",
+					"-Wno-deprecated-declarations",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+					"-lcrypto",
+					"-lfmt",
+					"-ljsoncpp",
+					"-llz4",
+					"-lssl",
+					"-lxxhash",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "DataGateMacPacketTunnel/DataGateMacPacketTunnel-Bridging-Header.h";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -444,17 +550,58 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					ASIO_STANDALONE,
+					USE_ASIO,
+					USE_OPENSSL,
+					HAVE_LZ4,
+					FMT_SHARED,
+					XXH_EXPORT,
+				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../openvpn3",
+					"$(PROJECT_DIR)/../openvpn3/client",
+					"/opt/homebrew/include",
+					"/opt/homebrew/opt/openssl/include",
+				);
 				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../build-engine",
+					"/opt/homebrew/lib",
+					"/opt/homebrew/opt/openssl/lib",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_CPLUSPLUSFLAGS = (
+					"$(inherited)",
+					"-std=gnu++20",
+					"-Wno-deprecated-declarations",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+					"-lcrypto",
+					"-lfmt",
+					"-ljsoncpp",
+					"-llz4",
+					"-lssl",
+					"-lxxhash",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "DataGateMacPacketTunnel/DataGateMacPacketTunnel-Bridging-Header.h";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};

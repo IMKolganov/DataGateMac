@@ -108,6 +108,15 @@ In the main app:
 
 You can build the StartSession-style config (WSS + OVPN) the same way as on Windows: pick server → API for device file (OVPN) → put host, port, path, ovpnContent into `providerConfiguration`.
 
+**Connect flow (current implementation):**
+
+1. User taps Connect on Home (MainView → HomePageView with `AuthStateStore`).
+2. `VpnViewModel.connect()`: if `authState` and valid token exist, calls `TunnelConfigBuilder.build(token:)`; otherwise uses a placeholder config.
+3. **TunnelConfigBuilder:** `InstallationIdService.getOrCreate()`, `JwtClaimReader.getExternalId(fromJwt:)`, `OpenVpnServersApiClient.getAllWithStatus(token:)` → pick best WSS server (online, `isEnableWss`, min `countConnectedClients`) → commonName `wdg-{serverId}-{externalId}-{installationId}` → `OpenVpnFilesApiClient.ensureAndDownloadDeviceFile(...)` (download-by-cn, or add-with-token then download) → build `TunnelConfig` from server `apiUrl` and OVPN content.
+4. `VpnTunnelManager.setConfiguration(config)` then `startTunnel()`; status comes from `NEVPNStatus`.
+
+If backend config fails (no server, no OVPN, API error), the app falls back to a placeholder config and still starts the tunnel (for testing); the log shows “Backend config failed, using placeholder.”
+
 ### 4. Extension: what to do in `startTunnel(options:completionHandler:)`
 
 1. Read config from `protocolConfiguration as? NETunnelProviderProtocol` → `providerConfiguration`.
@@ -118,13 +127,13 @@ You can build the StartSession-style config (WSS + OVPN) the same way as on Wind
 4. Set **TUN interface** via `self.networkSettings` / `setTunnelNetworkSettings` (IP, mask, routes), then call `completionHandler(nil)`.
 5. Packet handling: in `handlePacket` read packets from the tunnel and feed them to OpenVPN; from OpenVPN write back via `self.packetFlow.writePackets`.
 
-Implementing OpenVPN inside the extension usually requires a C/C++ library (e.g. openvpn3) built as a framework and linked to the extension target.
+Implementing OpenVPN inside the extension usually requires a C/C++ library (e.g. openvpn3) built as a framework and linked to the extension target. To link `libovpn3-core.a` (from `engine/` CMake build) you must also link its dependencies in the extension target: **OpenSSL** (`libssl`, `libcrypto`), **libc++**, and optionally fmt, lz4, etc., e.g. by adding the same libs to the extension’s “Link Binary With Libraries” and setting **Library Search Paths** (e.g. to Homebrew’s `/opt/homebrew/opt/openssl/lib`). Alternatively build a single fat library or XCFramework that includes ovpn3-core and all deps.
 
 ### 5. Component summary
 
 | Component | Where | Role |
 |-----------|--------|------|
-| Server selection, auth, OVPN from API | App | Existing pieces (OpenVpnServersApiClient, Auth). Add OpenVpnFiles-style API (download by CN), build payload like on Windows. |
+| Server selection, auth, OVPN from API | App | **Implemented:** OpenVpnServersApiClient, OpenVpnFilesApiClient (download-by-cn, add-with-token), InstallationIdService, JwtClaimReader, TunnelConfigBuilder; VpnViewModel uses them when user is logged in. |
 | NETunnelProviderManager | App | Save config, Start/Stop tunnel, expose NEVPNStatus to VpnViewModel. |
 | Packet Tunnel Provider | Extension | startTunnel: WSS bridge + OpenVPN, setTunnelNetworkSettings, packetFlow. |
 

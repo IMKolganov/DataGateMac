@@ -13,6 +13,8 @@ struct LoginView: View {
     @State private var statusText = "Not signed in."
     @State private var errorMessage: String?
     @State private var canceller: OAuthCanceller?
+    @State private var signInStartedAt: Date?
+    @State private var elapsedSeconds = 0
 
     var body: some View {
         VStack(spacing: 24) {
@@ -31,6 +33,18 @@ struct LoginView: View {
             Text(statusText)
                 .foregroundStyle(.secondary)
                 .font(.subheadline)
+
+            if isSigningIn, let start = signInStartedAt {
+                Text("Elapsed: \(elapsedSeconds)s")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+                    .task(id: start) {
+                        while isSigningIn {
+                            elapsedSeconds = Int(Date().timeIntervalSince(start))
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        }
+                    }
+            }
 
             HStack(spacing: 12) {
                 Button("Sign in with Google") {
@@ -57,15 +71,24 @@ struct LoginView: View {
         isSigningIn = true
         errorMessage = nil
         statusText = "Opening browser..."
+        signInStartedAt = Date()
+        elapsedSeconds = 0
         let oauthCanceller = OAuthCanceller()
         canceller = oauthCanceller
 
         do {
             let config = try AppConfig.load()
             let service = GoogleAuthService(config: config)
-            statusText = "Waiting for sign-in… Tap Cancel to abort."
+            statusText = "Starting sign-in…"
 
-            let response = try await service.signInAndLogin(canceller: oauthCanceller)
+            let response = try await service.signInAndLogin(
+                canceller: oauthCanceller,
+                onProgress: { progress in
+                    Task { @MainActor in
+                        statusText = progress
+                    }
+                }
+            )
             authState.completeLogin(response)
             statusText = "Signed in."
         } catch {
@@ -79,5 +102,6 @@ struct LoginView: View {
 
         canceller = nil
         isSigningIn = false
+        signInStartedAt = nil
     }
 }

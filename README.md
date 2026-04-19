@@ -52,21 +52,24 @@ git submodule update --init --recursive   # fetch openvpn3
 
 If the app uses a backend, copy the example config and set your values (e.g. `Config.example.plist` → `Config.plist` with **APIBaseURL** and optional **GIDClientID**). Config files are typically in `.gitignore`.
 
-### 3. Build in Xcode
+### 3. Build and run in Xcode
 
-Open the `.xcodeproj` or `.xcworkspace`, select the **DataGateMac** scheme and **My Mac**, then build (⌘B).
+- **One app, one scheme.** Open `DataGateMac/DataGateMac.xcodeproj`. There are two **targets** (DataGateMac app + DataGateMacPacketTunnel extension), but you **run only the app**: choose the **DataGateMac** scheme and **My Mac** as destination, then Run (⌘R). The extension is built and embedded into the app automatically; you do **not** run the extension as a second application.
+- **Destination:** Use **My Mac** (real device). The Packet Tunnel extension does **not** run in the Simulator.
+- **First run:** You may need to allow the app in **System Settings → Privacy & Security** and, for the VPN, approve the Network Extension in **System Settings → General → VPN & Network** (or when the system prompts).
 
 ## Project layout
 
 | Path | Description |
 |------|-------------|
 | **DataGateMac/** | Main app (Swift, SwiftUI) and Packet Tunnel extension. |
-| **openvpn3/** | OpenVPN 3 core (git submodule); build for macOS to use in the extension. |
+| **openvpn3/** | OpenVPN 3 source (git submodule). |
+| **engine/** | CMake build for macOS: produces `libovpn3-core.a` (same approach as DataGateWin/engine). |
 | **assets/** | Logo and images for the repo (e.g. README). |
 
-## Building OpenVPN 3 for macOS
+## Building OpenVPN 3 core for macOS
 
-The **openvpn3** directory is a git submodule ([OpenVPN/openvpn3](https://github.com/OpenVPN/openvpn3)). Build it on macOS to link into the Packet Tunnel extension (WSS bridge + OpenVPN core).
+We build the same **OpenVPN 3 core** as DataGateWin (static library from the `openvpn3` submodule) using **engine/** so the same VPN + WSS logic can run on Mac (in the Packet Tunnel extension or a separate engine process). See [engine/README.md](engine/README.md) for architecture and next steps.
 
 **Dependencies (Homebrew):**
 
@@ -79,20 +82,20 @@ brew install asio cmake fmt jsoncpp lz4 openssl pkg-config xxhash
 - Apple Silicon (arm64):
 
   ```bash
-  mkdir -p build-openvpn3 && cd build-openvpn3
-  cmake -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl -DCMAKE_PREFIX_PATH=/opt/homebrew ../openvpn3
+  mkdir -p build-engine && cd build-engine
+  cmake -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl -DCMAKE_PREFIX_PATH=/opt/homebrew ../engine
   cmake --build .
   ```
 
 - Intel (x86_64):
 
   ```bash
-  mkdir -p build-openvpn3 && cd build-openvpn3
-  cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_PREFIX_PATH=/usr/local/opt ../openvpn3
+  mkdir -p build-engine && cd build-engine
+  cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_PREFIX_PATH=/usr/local/opt ../engine
   cmake --build .
   ```
 
-Output: library and CLI in `build-openvpn3`. To use in the extension, you can build a static or dynamic library and add it to the **DataGateMacPacketTunnel** target (e.g. via a CMake-generated Xcode project or by adding the built library in Xcode). See [openvpn3/README.md](openvpn3/README.md) and [NETWORK_EXTENSION.md](NETWORK_EXTENSION.md).
+Output: **`build-engine/libovpn3-core.a`**. To use in the extension, add this static library to the **DataGateMacPacketTunnel** target in Xcode and implement (or port from DataGateWin) the WSS bridge + session layer. See [engine/README.md](engine/README.md) and [NETWORK_EXTENSION.md](NETWORK_EXTENSION.md).
 
 ## License
 

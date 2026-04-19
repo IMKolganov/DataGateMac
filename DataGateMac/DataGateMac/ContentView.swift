@@ -30,7 +30,11 @@ struct ContentView: View {
             .disabled(vm.isBusy)
 
             ScrollView {
-                Text(vm.logText)
+                Text(
+                    vm.extensionLogText.isEmpty
+                        ? vm.logText
+                        : vm.logText + "\n--- Extension ---\n" + vm.extensionLogText
+                )
                     .font(.system(.caption, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
@@ -42,9 +46,12 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
+        .task { await vm.ensureConfigurationLoaded() }
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
 }
