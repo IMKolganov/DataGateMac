@@ -112,7 +112,7 @@ enum TunnelConfigBuilder {
         let serverId = server.openVpnServerResponses.openVpnServer.id
         step("[Backend] Step 3: using server id=\(serverId) \(server.openVpnServerResponses.openVpnServer.serverName)")
 
-        let commonName = "wdg-\(serverId)-\(externalId)-\(installationId)"
+        let commonName = "mdg-\(serverId)-\(externalId)-\(installationId)"
         let issuedTo = externalId
 
         step("[Backend] Step 4: ensure and download OVPN file (download-by-cn / add-with-token)...")

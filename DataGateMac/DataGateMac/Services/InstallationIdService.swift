@@ -2,7 +2,7 @@
 //  InstallationIdService.swift
 //  DataGateMac
 //
-//  Persists installation ID (same role as DataGateWin). Used for CN: wdg-{serverId}-{externalId}-{installationId}.
+//  Persists installation ID (same role as DataGateWin). Used for CN: mdg-{serverId}-{externalId}-{installationId}.
 //
 
 import Foundation

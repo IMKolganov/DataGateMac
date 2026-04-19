@@ -7,6 +7,7 @@ import SwiftUI
 
 struct SettingsPageView: View {
     @ObservedObject var authState: AuthStateStore
+    @StateObject private var updateVM = AppUpdateViewModel()
     @State private var showAbout = false
     @AppStorage(AppAppearanceStorage.key) private var appearanceRaw: String = AppAppearance.system.rawValue
 
@@ -80,6 +81,62 @@ struct SettingsPageView: View {
 
                 Divider()
 
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(L10n.tr("settings_updates_title", "Updates"))
+                        .font(.headline)
+                    Text(L10n.tr("settings_updates_hint", "Check GitHub releases for a newer version of DataGate Mac."))
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(
+                            format: L10n.tr("settings_updates_current_fmt", "Current version: %@"),
+                            locale: L10n.activeLocaleForFormatting(),
+                            updateVM.currentVersion
+                        ))
+                        .foregroundStyle(.secondary)
+
+                        Text(String(
+                            format: L10n.tr("settings_updates_latest_fmt", "Latest available: %@"),
+                            locale: L10n.activeLocaleForFormatting(),
+                            updateVM.availableVersionText
+                        ))
+                        .foregroundStyle(.secondary)
+
+                        if !updateVM.statusText.isEmpty {
+                            Text(updateVM.statusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        Button {
+                            Task { await updateVM.checkForUpdates() }
+                        } label: {
+                            if updateVM.isChecking {
+                                Label(L10n.tr("settings_updates_checking", "Checking GitHub releases…"), systemImage: "arrow.triangle.2.circlepath")
+                            } else {
+                                Label(L10n.tr("settings_updates_check_button", "Check for updates"), systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(updateVM.isChecking)
+
+                        if let releaseURL = updateVM.releaseURL {
+                            Link(destination: releaseURL) {
+                                Label(L10n.tr("settings_updates_open_release", "Open latest release"), systemImage: "arrow.up.right.square")
+                            }
+                        } else {
+                            Link(destination: updateVM.releasesPageURL) {
+                                Label(L10n.tr("settings_updates_open_releases", "Open releases page"), systemImage: "arrow.up.right.square")
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
                 Button {
                     showAbout = true
                 } label: {
@@ -94,6 +151,7 @@ struct SettingsPageView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 400, minHeight: 300)
+        .task { await updateVM.checkForUpdatesIfNeeded() }
     }
 }
 

@@ -534,6 +534,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
+					"OPENVPN_VERSION=\\\"3.12_datagate_mac_$(MARKETING_VERSION)\\\"",
 					ASIO_STANDALONE,
 					USE_ASIO,
 					USE_OPENSSL,
@@ -598,6 +599,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
+					"OPENVPN_VERSION=\\\"3.12_datagate_mac_$(MARKETING_VERSION)\\\"",
 					ASIO_STANDALONE,
 					USE_ASIO,
 					USE_OPENSSL,

@@ -40,6 +40,14 @@ static NSString *ToNSString(const std::string &value) {
     return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
+static NSString *OpenVPNDatagateMacVersionString(void) {
+    NSString *appVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    if (appVersion.length == 0) {
+        appVersion = @"1.0";
+    }
+    return [NSString stringWithFormat:@"3.12_datagate_mac_%@", appVersion];
+}
+
 static NSString *OpenVPNSubnetMaskStringForPrefixLength(int prefixLength) {
     if (prefixLength <= 0 || prefixLength > 32) {
         return @"255.255.255.255";
@@ -718,7 +726,9 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
     const std::string content([ovpnContent UTF8String] ?: "");
     openvpn::ClientAPI::Config config;
     config.content = content;
-    config.guiVersion = "DataGateMac 1.0";
+    const NSString *datagateVersion = OpenVPNDatagateMacVersionString();
+    config.guiVersion = std::string(datagateVersion.UTF8String ?: "");
+    config.platformVersion = std::string(datagateVersion.UTF8String ?: "");
     config.clockTickMS = 0;
 
     const openvpn::ClientAPI::EvalConfig eval = _client->eval_config(config);
