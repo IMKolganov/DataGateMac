@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APIBaseURL</key>
+	<string>https://your-api-endpoint.com</string>
+	<key>GIDClientID</key>
+	<string>your_client_id.apps.googleusercontent.com</string>
+	<key>RedirectPort</key>
+	<integer>51723</integer>
+</dict>
+</plist>
