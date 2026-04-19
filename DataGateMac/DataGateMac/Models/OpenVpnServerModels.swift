@@ -54,6 +54,8 @@ struct OpenVpnServerDto: Decodable {
     let isEnableWss: Bool?
     let createDate: String
     let lastUpdate: String
+    /// When the API omits this field, treat the server as allowed (same as DataGate Linux).
+    let isAccessibleForUserQuotaPlan: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -66,6 +68,29 @@ struct OpenVpnServerDto: Decodable {
         case isEnableWss
         case createDate
         case lastUpdate
+        case isAccessibleForUserQuotaPlan
+        case isAccessibleForUserQuotaPlanPascal = "IsAccessibleForUserQuotaPlan"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        serverName = (try? c.decode(String.self, forKey: .serverName)) ?? ""
+        isOnline = try? c.decodeIfPresent(Bool.self, forKey: .isOnline)
+        isDefault = (try? c.decode(Bool.self, forKey: .isDefault)) ?? false
+        apiUrl = (try? c.decode(String.self, forKey: .apiUrl)) ?? ""
+        latitude = try? c.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try? c.decodeIfPresent(Double.self, forKey: .longitude)
+        isEnableWss = try? c.decodeIfPresent(Bool.self, forKey: .isEnableWss)
+        createDate = (try? c.decode(String.self, forKey: .createDate)) ?? ""
+        lastUpdate = (try? c.decode(String.self, forKey: .lastUpdate)) ?? ""
+        if let v = try? c.decodeIfPresent(Bool.self, forKey: .isAccessibleForUserQuotaPlan) {
+            isAccessibleForUserQuotaPlan = v
+        } else if let v = try? c.decodeIfPresent(Bool.self, forKey: .isAccessibleForUserQuotaPlanPascal) {
+            isAccessibleForUserQuotaPlan = v
+        } else {
+            isAccessibleForUserQuotaPlan = true
+        }
     }
 }
 

@@ -77,6 +77,18 @@ fastlane/test_output
 # Config with secrets (copy from Config.example.plist)
 Config.plist
 
+# Local Codex / editor metadata
+.cursor/
+
+# Local VPN / extension diagnostics
+DataGateMac_NE_log.txt
+
+# Local CMake build output for ovpn3 engine
+build-engine/
+
+# Local installer output
+dist/
+
 # Code Injection
 #
 # After new code Injection tools there's a generated folder /iOSInjectionProject

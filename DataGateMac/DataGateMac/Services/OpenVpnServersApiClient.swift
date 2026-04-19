@@ -56,6 +56,7 @@ enum ApiClientError: LocalizedError {
     case invalidResponse
     case unauthorized
     case httpError(statusCode: Int)
+    case custom(String)
 
     var errorDescription: String? {
         switch self {
@@ -63,6 +64,7 @@ enum ApiClientError: LocalizedError {
         case .invalidResponse: return "Invalid response"
         case .unauthorized: return "Unauthorized"
         case .httpError(let code): return "HTTP error: \(code)"
+        case .custom(let msg): return msg
         }
     }
 }

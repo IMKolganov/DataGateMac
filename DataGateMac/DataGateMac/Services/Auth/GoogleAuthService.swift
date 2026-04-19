@@ -46,16 +46,26 @@ final class OAuthCanceller {
 
 final class GoogleAuthService {
     private let config: AppConfig
+    private let redirectTimeout: TimeInterval = 180
+    private let backendTimeout: TimeInterval = 60
 
     init(config: AppConfig) {
         self.config = config
     }
 
-    func signInAndLogin(canceller: OAuthCanceller? = nil) async throws -> GoogleLoginResponse {
+    func signInAndLogin(
+        canceller: OAuthCanceller? = nil,
+        onProgress: ((String) -> Void)? = nil
+    ) async throws -> GoogleLoginResponse {
         let redirectUri = "http://127.0.0.1:\(config.redirectPort)/"
         let state = Self.generateState()
         let pkce = PkcePair.createS256()
 
+        onProgress?(String(
+            format: L10n.tr("google_progress_preparing", "Preparing local sign-in server on 127.0.0.1:%d…"),
+            locale: L10n.activeLocaleForFormatting(),
+            config.redirectPort
+        ))
         let authUrl = Self.buildAuthorizationUrl(
             clientId: config.googleClientId,
             redirectUri: redirectUri,
@@ -63,11 +73,21 @@ final class GoogleAuthService {
             codeChallenge: pkce.codeChallenge
         )
 
-        let query = try await receiveRedirect(port: config.redirectPort, openUrl: authUrl, canceller: canceller)
+        let query = try await receiveRedirect(
+            port: config.redirectPort,
+            openUrl: authUrl,
+            canceller: canceller,
+            onProgress: onProgress
+        )
 
         if let error = query["error"], !error.isEmpty {
             let desc = query["error_description"] ?? ""
-            throw AuthError.authorizationFailed("\(error). \(desc)")
+            let detail = "\(error). \(desc)"
+            throw AuthError.authorizationFailed(String(
+                format: L10n.tr("oauth_auth_failed_fmt", "OAuth error: %@"),
+                locale: L10n.activeLocaleForFormatting(),
+                detail
+            ))
         }
         guard query["state"] == state else {
             throw AuthError.stateMismatch
@@ -82,6 +102,7 @@ final class GoogleAuthService {
             redirectUri: redirectUri
         )
 
+        onProgress?(L10n.tr("google_progress_exchange", "Authorization code received. Exchanging it with the backend…"))
         let apiUrl = "\(config.apiBaseUrl)/api/auth/google-code-login"
         let apiResponse: ApiResponse<GoogleLoginResponse> = try await postJson(apiUrl, body: request)
 
@@ -112,20 +133,36 @@ final class GoogleAuthService {
         return components.url!.absoluteString
     }
 
-    private func receiveRedirect(port: Int, openUrl: String, canceller: OAuthCanceller?) async throws -> [String: String] {
+    private func receiveRedirect(
+        port: Int,
+        openUrl: String,
+        canceller: OAuthCanceller?,
+        onProgress: ((String) -> Void)?
+    ) async throws -> [String: String] {
         log("Starting OAuth redirect listener on port \(port)")
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String: String], Error>) in
             let queue = DispatchQueue(label: "com.datagate.oauth.redirect")
             var didResume = false
-            func resumeOnce(_ f: @escaping () -> Void) {
+            var listener: NWListener?
+            var timeoutWorkItem: DispatchWorkItem?
+
+            func resumeOnce(_ f: @escaping @Sendable () -> Void) {
                 queue.async {
                     guard !didResume else { return }
                     didResume = true
+                    timeoutWorkItem?.cancel()
                     f()
                 }
             }
 
-            let listener: NWListener
+            timeoutWorkItem = DispatchWorkItem {
+                resumeOnce {
+                    log("OAuth redirect timed out after \(Int(self.redirectTimeout))s")
+                    listener?.cancel()
+                    continuation.resume(throwing: AuthError.redirectTimedOut(seconds: Int(self.redirectTimeout)))
+                }
+            }
+
             do {
                 let params = NWParameters.tcp
                 params.allowLocalEndpointReuse = true
@@ -134,9 +171,17 @@ final class GoogleAuthService {
             } catch {
                 log("Listener failed: \(error.localizedDescription)")
                 let msg = (error as NSError).domain == NSPOSIXErrorDomain && (error as NSError).code == 1
-                    ? "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement."
+                    ? L10n.tr("oauth_listener_entitlement", "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement.")
                     : error.localizedDescription
                 continuation.resume(throwing: AuthError.listenerFailed(msg))
+                return
+            }
+            if let timeoutWorkItem {
+                queue.asyncAfter(deadline: .now() + redirectTimeout, execute: timeoutWorkItem)
+            }
+
+            guard let listener else {
+                continuation.resume(throwing: AuthError.listenerFailed(L10n.tr("oauth_listener_failed", "Failed to initialize OAuth listener.")))
                 return
             }
 
@@ -148,13 +193,20 @@ final class GoogleAuthService {
             listener.stateUpdateHandler = { state in
                 log("Listener state: \(String(describing: state))")
                 if state == .ready {
+                    onProgress?(String(
+                        format: L10n.tr("google_progress_browser_wait", "Browser opened. Waiting for Google to call back to 127.0.0.1:%d…"),
+                        locale: L10n.activeLocaleForFormatting(),
+                        port
+                    ))
                     log("Listener ready, opening browser on main thread")
+                    Self.runLoopbackHealthCheck(port: port, onProgress: onProgress)
                     DispatchQueue.main.async {
                         NSWorkspace.shared.open(URL(string: openUrl)!)
                         log("Browser opened, waiting for redirect to http://127.0.0.1:\(port)/")
                     }
                 } else if case .failed(let err) = state {
                     log("Listener failed: \(err.debugDescription)")
+                    resumeOnce { continuation.resume(throwing: AuthError.listenerFailed(err.localizedDescription)) }
                 }
             }
 
@@ -168,21 +220,41 @@ final class GoogleAuthService {
                         if let data = data { received.append(data) }
                         let hasCompleteRequest = received.contains(Data("\r\n\r\n".utf8)) || (String(data: received, encoding: .utf8) ?? "").contains("?code=")
                         if isComplete || error != nil || hasCompleteRequest {
-                            log("Request received, isComplete=\(isComplete), hasComplete=\(hasCompleteRequest)")
+                            let requestLine = Self.requestLine(from: received) ?? "<unknown request>"
+                            log("Request received, isComplete=\(isComplete), hasComplete=\(hasCompleteRequest), line=\(requestLine)")
                             let query = Self.parseQueryFromRequest(received)
-                            let html = "<html><body><h2>Success!</h2><p>You can close this window now.</p></body></html>"
+                            let isAuthCallback = query["code"]?.isEmpty == false || query["error"]?.isEmpty == false
+                            if isAuthCallback {
+                                onProgress?(L10n.tr("google_progress_callback", "Google callback received from localhost. Finishing sign-in…"))
+                            }
+                            let html: String
+                            let hasCode = !(query["code"] ?? "").isEmpty
+                            let hasOAuthError = !(query["error"] ?? "").isEmpty
+                            if hasCode {
+                                html = OAuthLoopbackHtml.successDocument()
+                            } else if hasOAuthError {
+                                let errCode = query["error"] ?? ""
+                                let errDesc = query["error_description"] ?? ""
+                                html = OAuthLoopbackHtml.googleErrorDocument(errorCode: errCode, errorDescription: errDesc)
+                            } else {
+                                html = OAuthLoopbackHtml.waitingDocument()
+                            }
                             let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
                             guard let responseData = response.data(using: .utf8) else {
                                 connection.cancel()
-                                listener.cancel()
-                                resumeOnce { continuation.resume(returning: query) }
+                                if isAuthCallback {
+                                    listener.cancel()
+                                    resumeOnce { continuation.resume(returning: query) }
+                                }
                                 return
                             }
                             connection.send(content: responseData, completion: .contentProcessed { _ in
-                                log("Response sent, OAuth redirect complete")
+                                log("Response sent, authCallback=\(isAuthCallback)")
                                 connection.cancel()
-                                listener.cancel()
-                                resumeOnce { continuation.resume(returning: query) }
+                                if isAuthCallback {
+                                    listener.cancel()
+                                    resumeOnce { continuation.resume(returning: query) }
+                                }
                             })
                         } else {
                             receiveMore()
@@ -219,6 +291,33 @@ final class GoogleAuthService {
         return result
     }
 
+    private static func requestLine(from data: Data) -> String? {
+        String(data: data, encoding: .utf8)?
+            .components(separatedBy: "\r\n")
+            .first
+    }
+
+    private static func runLoopbackHealthCheck(port: Int, onProgress: ((String) -> Void)?) {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/__healthcheck__") else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
+        let task = URLSession(configuration: .ephemeral).dataTask(with: request) { _, response, error in
+            if let error {
+                log("Loopback health check failed: \(error.localizedDescription)")
+                onProgress?(L10n.tr("google_progress_health_fail", "Local callback server did not answer its own localhost probe."))
+                return
+            }
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            log("Loopback health check passed with HTTP \(code)")
+            onProgress?(String(
+                format: L10n.tr("google_progress_health_ok", "Local callback server is listening on 127.0.0.1:%d. Waiting for Google redirect…"),
+                locale: L10n.activeLocaleForFormatting(),
+                port
+            ))
+        }
+        task.resume()
+    }
+
     private static func generateState() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -237,6 +336,7 @@ final class GoogleAuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        request.timeoutInterval = backendTimeout
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -279,6 +379,7 @@ final class GoogleAuthService {
         case stateMismatch
         case noCodeReturned
         case listenerFailed(String)
+        case redirectTimedOut(seconds: Int)
         case httpError(String)
         case apiLoginFailed(String)
         case cancelled
@@ -286,12 +387,23 @@ final class GoogleAuthService {
         var errorDescription: String? {
             switch self {
             case .authorizationFailed(let msg): return msg
-            case .stateMismatch: return "State validation failed."
-            case .noCodeReturned: return "Authorization code was not returned."
+            case .stateMismatch: return L10n.tr("oauth_state_mismatch", "State validation failed.")
+            case .noCodeReturned: return L10n.tr("oauth_no_code", "Authorization code was not returned.")
             case .listenerFailed(let msg): return msg
+            case .redirectTimedOut(let seconds):
+                return String(
+                    format: L10n.tr("oauth_timeout", "Timed out waiting for the Google redirect after %d seconds."),
+                    locale: L10n.activeLocaleForFormatting(),
+                    seconds
+                )
             case .httpError(let msg): return msg
-            case .apiLoginFailed(let msg): return "API login failed: \(msg)"
-            case .cancelled: return "Sign-in cancelled."
+            case .apiLoginFailed(let msg):
+                return String(
+                    format: L10n.tr("oauth_api_failed", "API login failed: %@"),
+                    locale: L10n.activeLocaleForFormatting(),
+                    msg
+                )
+            case .cancelled: return L10n.tr("oauth_cancelled", "Sign-in cancelled.")
             }
         }
     }

@@ -60,7 +60,8 @@ final class StatisticsApiClient {
         token: String,
         from: Date,
         to: Date,
-        vpnServerId: Int? = nil
+        vpnServerId: Int? = nil,
+        externalId: String? = nil
     ) async throws -> OverviewTotalsResponse {
         let config = try AppConfig.load()
         let baseUrl = config.apiBaseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -71,6 +72,9 @@ final class StatisticsApiClient {
         ]
         if let id = vpnServerId {
             comps.queryItems?.append(URLQueryItem(name: "VpnServerId", value: "\(id)"))
+        }
+        if let ext = externalId?.trimmingCharacters(in: .whitespacesAndNewlines), !ext.isEmpty {
+            comps.queryItems?.append(URLQueryItem(name: "ExternalId", value: ext))
         }
         guard let url = comps.url else { throw ApiClientError.invalidConfig }
 
@@ -88,6 +92,10 @@ final class StatisticsApiClient {
 
         let decoder = JSONDecoder()
         let apiResp = try decoder.decode(ApiResponse<OverviewTotalsResponse>.self, from: data)
+        if !apiResp.success {
+            let empty = TotalsPayloadDto(sessionsCount: 0, usersCount: 0, trafficInBytes: 0, trafficOutBytes: 0, trafficTotalBytes: nil)
+            return OverviewTotalsResponse(meta: nil, totals: empty)
+        }
         guard let payload = apiResp.data else {
             let empty = TotalsPayloadDto(sessionsCount: 0, usersCount: 0, trafficInBytes: 0, trafficOutBytes: 0, trafficTotalBytes: nil)
             return OverviewTotalsResponse(meta: nil, totals: empty)
