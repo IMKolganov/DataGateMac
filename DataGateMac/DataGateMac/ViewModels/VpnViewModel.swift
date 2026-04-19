@@ -18,9 +18,9 @@ final class VpnViewModel: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .unauthorized:
-                return "Sign in again before connecting."
+                return L10n.tr("vpn_flow_sign_in_again", "Sign in again before connecting.")
             case .backendConfigUnavailable:
-                return "Could not build VPN configuration from the backend."
+                return L10n.tr("vpn_flow_backend_unavailable", "Could not build VPN configuration from the backend.")
             }
         }
     }
@@ -28,7 +28,7 @@ final class VpnViewModel: ObservableObject {
     @Published var isConnected: Bool = false
     /// True while Connect cannot be tapped again (loading prefs, connect task, or tunnel is connecting / disconnecting). When status is Connected, this is false so Disconnect stays enabled.
     @Published var isBusy: Bool = false
-    @Published var statusText: String = "Disconnected"
+    @Published var statusText: String = L10n.tr("vpn_status_disconnected", "Disconnected")
     /// Set when a backend tunnel config is applied (server label + WSS endpoint). Cleared when the tunnel is disconnected.
     @Published var activeTunnelSummary: String = ""
     @Published var logText: String = ""
@@ -48,6 +48,7 @@ final class VpnViewModel: ObservableObject {
     private var connectInProgress: Bool = false
     private var previousTunnelStatus: NEVPNStatus = .invalid
     private var hasLoggedVpnDiagnostics: Bool = false
+    private var languageChangeObserver: NSObjectProtocol?
     /// When set, Connect uses backend (server list + OVPN file). When nil, uses placeholder config.
     private weak var authState: AuthStateStore?
 
@@ -63,10 +64,21 @@ final class VpnViewModel: ObservableObject {
             .sink { [weak self] _ in self?.syncFromTunnel() }
             .store(in: &cancellables)
         startExtensionLogPolling()
+
+        languageChangeObserver = NotificationCenter.default.addObserver(
+            forName: .appLanguageChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.syncFromTunnel() }
+        }
     }
 
     deinit {
         extensionLogPollTimer?.invalidate()
+        if let o = languageChangeObserver {
+            NotificationCenter.default.removeObserver(o)
+        }
     }
 
     private func startExtensionLogPolling() {
@@ -78,6 +90,13 @@ final class VpnViewModel: ObservableObject {
     }
 
     private func refreshExtensionLog() {
+        // Avoid reading the App Group from the host while idle or connecting — macOS 15+ may prompt
+        // ("…access data from other apps") on each container access when the profile does not fully authorize the group.
+        let s = tunnelManager.status
+        guard s == .connected || s == .reasserting || s == .disconnecting else {
+            extensionLogText = ""
+            return
+        }
         extensionLogText = ExtensionLogReader.read()
     }
 
@@ -87,6 +106,16 @@ final class VpnViewModel: ObservableObject {
         } else {
             connect()
         }
+    }
+
+    /// Matches Windows home: Connect only when idle / disconnected; not while busy or already tunneling.
+    var canTapConnect: Bool {
+        !isBusy && !tunnelManager.isConnectingOrConnected
+    }
+
+    /// Disconnect when connected or reasserting; disabled while connecting/disconnecting or other busy work.
+    var canTapDisconnect: Bool {
+        !isBusy && (tunnelManager.status == .connected || tunnelManager.status == .reasserting)
     }
 
     /// Call once when the UI appears so the tunnel config is ready for Connect.
@@ -106,7 +135,7 @@ final class VpnViewModel: ObservableObject {
             showVpnProfileResetSuggestion = false
             showVpnProfileResetAlert = false
         } catch {
-            appendLog("[Connect flow] Step 0 FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "loading VPN configuration"))")
+            appendLog("[Connect flow] Step 0 FAIL: \(tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_loading_config", "loading VPN configuration")))")
             if shouldOfferVpnProfileResetAfterConfigurationError(error) {
                 showVpnProfileResetSuggestion = true
                 showVpnProfileResetAlert = true
@@ -122,8 +151,8 @@ final class VpnViewModel: ObservableObject {
         }
         connectInProgress = true
         isBusy = true
-        statusText = "Connecting..."
-        ExtensionLogReader.clear()
+        statusText = L10n.tr("vpn_status_connecting", "Connecting...")
+        extensionLogText = ""
         appendLog("[Connect flow] Connect tapped: starting...")
 
         Task { @MainActor in
@@ -155,7 +184,7 @@ final class VpnViewModel: ObservableObject {
                 showVpnProfileResetAlert = false
             } catch {
                 activeTunnelSummary = ""
-                appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorEnglishDescription(error, action: "updating VPN configuration"))")
+                appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_updating_config", "updating VPN configuration")))")
                 if shouldOfferVpnProfileResetAfterConfigurationError(error) {
                     showVpnProfileResetSuggestion = true
                     showVpnProfileResetAlert = true
@@ -184,7 +213,7 @@ final class VpnViewModel: ObservableObject {
             showVpnProfileResetSuggestion = false
             showVpnProfileResetAlert = false
         } catch {
-            appendLog("[Connect flow] Reset VPN profile FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "resetting VPN configuration"))")
+            appendLog("[Connect flow] Reset VPN profile FAIL: \(tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_resetting_config", "resetting VPN configuration")))")
         }
     }
 

@@ -140,26 +140,30 @@ struct TunnelConfig: Sendable {
     }
 }
 
-/// Returns an English description for tunnel errors so logs/UI stay in English (system may return localizedDescription in user locale).
-private func tunnelErrorEnglishDescription(_ error: Error) -> String {
+/// Localized description for tunnel disconnect errors (shown in UI status).
+private func tunnelErrorLocalizedDescription(_ error: Error) -> String {
     let ns = error as NSError
     switch (ns.domain, ns.code) {
     case ("NEVPNErrorDomain", 1), (NEVPNConnectionErrorDomain, 1):
-        return "VPN configuration invalid (e.g. packet tunnel extension not installed). Run the app from Xcode and try Connect again."
+        return L10n.tr("vpn_err_ne_invalid", "VPN configuration invalid (e.g. packet tunnel extension not installed). Run the app from Xcode and try Connect again.")
     case ("NEVPNErrorDomain", 4):
-        return "VPN configuration stale; reload and try again."
+        return L10n.tr("vpn_err_ne_stale", "VPN configuration stale; reload and try again.")
     case ("NEVPNErrorDomain", 5):
-        return "VPN configuration read/write failed (check entitlements)."
+        return L10n.tr("vpn_err_ne_rw_failed", "VPN configuration read/write failed (check entitlements).")
     case ("NEVPNErrorDomain", 14), (NEVPNConnectionErrorDomain, 14):
-        return "Packet tunnel extension not available (code 14). The OS did not load the embedded appex (PlugInKit often reports 0 matches). If the app is already in /Applications and [Diagnostics] shows the appex OK: verify App ID imkolganov.DataGateMac.PacketTunnel in Apple Developer (Network Extension + same App Group), reboot, check Console (neagent/pkd). Otherwise install from /Applications and avoid Run from Xcode for VPN tests."
+        return L10n.tr("vpn_err_ne_14", "Packet tunnel extension not available (code 14). The OS did not load the embedded extension. Install from /Applications, verify entitlements, reboot if needed.")
     default:
-        return "Connection failed (\(ns.domain) code \(ns.code))"
+        return String(
+            format: L10n.tr("vpn_err_connection_failed_fmt", "Connection failed (%@ code %d)"),
+            locale: L10n.activeLocaleForFormatting(),
+            ns.domain,
+            ns.code
+        )
     }
 }
 
-/// Returns a more actionable description for configuration read/write failures
-/// (load/save/remove in Network Extension preferences).
-func tunnelConfigurationErrorEnglishDescription(_ error: Error, action: String) -> String {
+/// Localized description for configuration read/write failures (Network Extension preferences).
+func tunnelConfigurationErrorLocalizedDescription(_ error: Error, action: String) -> String {
     let ns = error as NSError
     let lowerDescription = ns.localizedDescription.lowercased()
     let isPermissionDenied =
@@ -168,10 +172,25 @@ func tunnelConfigurationErrorEnglishDescription(_ error: Error, action: String) 
         || (ns.domain == NSCocoaErrorDomain && ns.code == NSUserCancelledError)
 
     if isPermissionDenied {
-        return "Permission denied while \(action). macOS blocked VPN configuration changes for this app, so saveToPreferences/loadFromPreferences did not complete. This usually means the VPN approval prompt was denied earlier or the existing DataGate profile is stale. Remove DataGate in System Settings -> VPN, relaunch /Users/rackot/Applications/DataGateMac.app, then try Connect again and allow the system prompt if it appears. [\(ns.domain) code \(ns.code)]"
+        return String(
+            format: L10n.tr(
+                "vpn_err_permission_fmt",
+                "Permission denied while %@. macOS blocked VPN configuration changes. Remove DataGate in System Settings → VPN, relaunch the app from Applications, then try Connect again and allow the prompt. [%@ code %d]"
+            ),
+            locale: L10n.activeLocaleForFormatting(),
+            action,
+            ns.domain,
+            ns.code
+        )
     }
 
-    return "\(ns.localizedDescription) [\(ns.domain) code \(ns.code)]"
+    return String(
+        format: L10n.tr("vpn_err_config_detail_fmt", "%@ [%@ code %d]"),
+        locale: L10n.activeLocaleForFormatting(),
+        ns.localizedDescription,
+        ns.domain,
+        ns.code
+    )
 }
 
 /// True when resetting the saved VPN profile is a reasonable next step (permission / stale profile).
@@ -223,7 +242,7 @@ final class VpnTunnelManager: ObservableObject {
                     conn.fetchLastDisconnectError { [weak self] error in
                         DispatchQueue.main.async {
                             guard let self else { return }
-                            let message = error.map { tunnelErrorEnglishDescription($0) }
+                            let message = error.map { tunnelErrorLocalizedDescription($0) }
                             self.lastError = message
                             if let msg = message {
                                 self.onLog?("[Tunnel] Last disconnect error: \(msg)")
@@ -440,13 +459,13 @@ final class VpnTunnelManager: ObservableObject {
     /// Current status text for UI (Connected / Disconnected / Connecting etc.).
     var statusDisplayText: String {
         switch status {
-        case .invalid: return "Not configured"
-        case .disconnected: return "Disconnected"
-        case .connecting: return "Connecting..."
-        case .connected: return "Connected"
-        case .reasserting: return "Reconnecting..."
-        case .disconnecting: return "Disconnecting..."
-        @unknown default: return "Unknown"
+        case .invalid: return L10n.tr("vpn_status_invalid", "Not configured")
+        case .disconnected: return L10n.tr("vpn_status_disconnected", "Disconnected")
+        case .connecting: return L10n.tr("vpn_status_connecting", "Connecting...")
+        case .connected: return L10n.tr("vpn_status_connected", "Connected")
+        case .reasserting: return L10n.tr("vpn_status_reasserting", "Reconnecting...")
+        case .disconnecting: return L10n.tr("vpn_status_disconnecting", "Disconnecting...")
+        @unknown default: return L10n.tr("vpn_status_unknown", "Unknown")
         }
     }
 
@@ -475,7 +494,7 @@ final class VpnTunnelManager: ObservableObject {
                     conn.fetchLastDisconnectError { [weak self] error in
                         DispatchQueue.main.async {
                             guard let self else { return }
-                            let message = error.map { tunnelErrorEnglishDescription($0) }
+                            let message = error.map { tunnelErrorLocalizedDescription($0) }
                             self.lastError = message
                             if let msg = message {
                                 self.onLog?("[Tunnel] Last disconnect error: \(msg)")

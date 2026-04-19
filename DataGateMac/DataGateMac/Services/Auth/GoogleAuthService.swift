@@ -61,7 +61,11 @@ final class GoogleAuthService {
         let state = Self.generateState()
         let pkce = PkcePair.createS256()
 
-        onProgress?("Preparing local sign-in server on 127.0.0.1:\(config.redirectPort)…")
+        onProgress?(String(
+            format: L10n.tr("google_progress_preparing", "Preparing local sign-in server on 127.0.0.1:%d…"),
+            locale: L10n.activeLocaleForFormatting(),
+            config.redirectPort
+        ))
         let authUrl = Self.buildAuthorizationUrl(
             clientId: config.googleClientId,
             redirectUri: redirectUri,
@@ -78,7 +82,12 @@ final class GoogleAuthService {
 
         if let error = query["error"], !error.isEmpty {
             let desc = query["error_description"] ?? ""
-            throw AuthError.authorizationFailed("\(error). \(desc)")
+            let detail = "\(error). \(desc)"
+            throw AuthError.authorizationFailed(String(
+                format: L10n.tr("oauth_auth_failed_fmt", "OAuth error: %@"),
+                locale: L10n.activeLocaleForFormatting(),
+                detail
+            ))
         }
         guard query["state"] == state else {
             throw AuthError.stateMismatch
@@ -93,7 +102,7 @@ final class GoogleAuthService {
             redirectUri: redirectUri
         )
 
-        onProgress?("Authorization code received. Exchanging it with the backend…")
+        onProgress?(L10n.tr("google_progress_exchange", "Authorization code received. Exchanging it with the backend…"))
         let apiUrl = "\(config.apiBaseUrl)/api/auth/google-code-login"
         let apiResponse: ApiResponse<GoogleLoginResponse> = try await postJson(apiUrl, body: request)
 
@@ -162,7 +171,7 @@ final class GoogleAuthService {
             } catch {
                 log("Listener failed: \(error.localizedDescription)")
                 let msg = (error as NSError).domain == NSPOSIXErrorDomain && (error as NSError).code == 1
-                    ? "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement."
+                    ? L10n.tr("oauth_listener_entitlement", "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement.")
                     : error.localizedDescription
                 continuation.resume(throwing: AuthError.listenerFailed(msg))
                 return
@@ -172,7 +181,7 @@ final class GoogleAuthService {
             }
 
             guard let listener else {
-                continuation.resume(throwing: AuthError.listenerFailed("Failed to initialize OAuth listener."))
+                continuation.resume(throwing: AuthError.listenerFailed(L10n.tr("oauth_listener_failed", "Failed to initialize OAuth listener.")))
                 return
             }
 
@@ -184,7 +193,11 @@ final class GoogleAuthService {
             listener.stateUpdateHandler = { state in
                 log("Listener state: \(String(describing: state))")
                 if state == .ready {
-                    onProgress?("Browser opened. Waiting for Google to call back to 127.0.0.1:\(port)…")
+                    onProgress?(String(
+                        format: L10n.tr("google_progress_browser_wait", "Browser opened. Waiting for Google to call back to 127.0.0.1:%d…"),
+                        locale: L10n.activeLocaleForFormatting(),
+                        port
+                    ))
                     log("Listener ready, opening browser on main thread")
                     Self.runLoopbackHealthCheck(port: port, onProgress: onProgress)
                     DispatchQueue.main.async {
@@ -212,13 +225,19 @@ final class GoogleAuthService {
                             let query = Self.parseQueryFromRequest(received)
                             let isAuthCallback = query["code"]?.isEmpty == false || query["error"]?.isEmpty == false
                             if isAuthCallback {
-                                onProgress?("Google callback received from localhost. Finishing sign-in…")
+                                onProgress?(L10n.tr("google_progress_callback", "Google callback received from localhost. Finishing sign-in…"))
                             }
                             let html: String
-                            if isAuthCallback {
-                                html = "<html><body><h2>Success!</h2><p>You can close this window now.</p></body></html>"
+                            let hasCode = !(query["code"] ?? "").isEmpty
+                            let hasOAuthError = !(query["error"] ?? "").isEmpty
+                            if hasCode {
+                                html = OAuthLoopbackHtml.successDocument()
+                            } else if hasOAuthError {
+                                let errCode = query["error"] ?? ""
+                                let errDesc = query["error_description"] ?? ""
+                                html = OAuthLoopbackHtml.googleErrorDocument(errorCode: errCode, errorDescription: errDesc)
                             } else {
-                                html = "<html><body><h2>DataGate sign-in server is running.</h2><p>Return to the browser tab that asked you to sign in.</p></body></html>"
+                                html = OAuthLoopbackHtml.waitingDocument()
                             }
                             let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
                             guard let responseData = response.data(using: .utf8) else {
@@ -285,12 +304,16 @@ final class GoogleAuthService {
         let task = URLSession(configuration: .ephemeral).dataTask(with: request) { _, response, error in
             if let error {
                 log("Loopback health check failed: \(error.localizedDescription)")
-                onProgress?("Local callback server did not answer its own localhost probe.")
+                onProgress?(L10n.tr("google_progress_health_fail", "Local callback server did not answer its own localhost probe."))
                 return
             }
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             log("Loopback health check passed with HTTP \(code)")
-            onProgress?("Local callback server is listening on 127.0.0.1:\(port). Waiting for Google redirect…")
+            onProgress?(String(
+                format: L10n.tr("google_progress_health_ok", "Local callback server is listening on 127.0.0.1:%d. Waiting for Google redirect…"),
+                locale: L10n.activeLocaleForFormatting(),
+                port
+            ))
         }
         task.resume()
     }
@@ -364,13 +387,23 @@ final class GoogleAuthService {
         var errorDescription: String? {
             switch self {
             case .authorizationFailed(let msg): return msg
-            case .stateMismatch: return "State validation failed."
-            case .noCodeReturned: return "Authorization code was not returned."
+            case .stateMismatch: return L10n.tr("oauth_state_mismatch", "State validation failed.")
+            case .noCodeReturned: return L10n.tr("oauth_no_code", "Authorization code was not returned.")
             case .listenerFailed(let msg): return msg
-            case .redirectTimedOut(let seconds): return "Timed out waiting for the Google redirect after \(seconds) seconds."
+            case .redirectTimedOut(let seconds):
+                return String(
+                    format: L10n.tr("oauth_timeout", "Timed out waiting for the Google redirect after %d seconds."),
+                    locale: L10n.activeLocaleForFormatting(),
+                    seconds
+                )
             case .httpError(let msg): return msg
-            case .apiLoginFailed(let msg): return "API login failed: \(msg)"
-            case .cancelled: return "Sign-in cancelled."
+            case .apiLoginFailed(let msg):
+                return String(
+                    format: L10n.tr("oauth_api_failed", "API login failed: %@"),
+                    locale: L10n.activeLocaleForFormatting(),
+                    msg
+                )
+            case .cancelled: return L10n.tr("oauth_cancelled", "Sign-in cancelled.")
             }
         }
     }

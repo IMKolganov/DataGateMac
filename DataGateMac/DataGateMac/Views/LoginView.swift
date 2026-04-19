@@ -10,18 +10,19 @@ import SwiftUI
 struct LoginView: View {
     @ObservedObject var authState: AuthStateStore
     @State private var isSigningIn = false
-    @State private var statusText = "Not signed in."
+    @State private var statusText = L10n.tr("login_status_not_signed_in", "Not signed in.")
     @State private var errorMessage: String?
     @State private var canceller: OAuthCanceller?
     @State private var signInStartedAt: Date?
     @State private var elapsedSeconds = 0
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("DataGate")
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 24) {
+            Text(L10n.tr("login_title", "DataGate"))
                 .font(.title)
                 .fontWeight(.semibold)
-            Text("Sign in to continue")
+            Text(L10n.tr("login_subtitle", "Sign in to continue"))
                 .foregroundStyle(.secondary)
 
             if let msg = errorMessage {
@@ -35,7 +36,7 @@ struct LoginView: View {
                 .font(.subheadline)
 
             if isSigningIn, let start = signInStartedAt {
-                Text("Elapsed: \(elapsedSeconds)s")
+                Text(String(format: L10n.tr("login_elapsed_fmt", "Elapsed: %d s"), locale: L10n.activeLocaleForFormatting(), elapsedSeconds))
                     .foregroundStyle(.tertiary)
                     .font(.caption)
                     .task(id: start) {
@@ -47,7 +48,7 @@ struct LoginView: View {
             }
 
             HStack(spacing: 12) {
-                Button("Sign in with Google") {
+                Button(L10n.tr("login_sign_google", "Sign in with Google")) {
                     Task { await signInWithGoogle() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -55,22 +56,42 @@ struct LoginView: View {
                 .disabled(isSigningIn)
 
                 if isSigningIn {
-                    Button("Cancel") {
+                    Button(L10n.tr("login_cancel", "Cancel")) {
                         canceller?.cancel()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 }
             }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(L10n.tr("settings_language", "Language"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                AppLanguagePicker()
+            }
+            .padding(.top, 8)
+            .padding(.trailing, 16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .onReceive(NotificationCenter.default.publisher(for: .appLanguageChanged)) { _ in
+            refreshStaticLocalizedStrings()
+        }
+    }
+
+    private func refreshStaticLocalizedStrings() {
+        if !isSigningIn, errorMessage == nil {
+            statusText = L10n.tr("login_status_not_signed_in", "Not signed in.")
+        }
     }
 
     private func signInWithGoogle() async {
         isSigningIn = true
         errorMessage = nil
-        statusText = "Opening browser..."
+        statusText = L10n.tr("login_status_opening_browser", "Opening browser…")
         signInStartedAt = Date()
         elapsedSeconds = 0
         let oauthCanceller = OAuthCanceller()
@@ -79,7 +100,7 @@ struct LoginView: View {
         do {
             let config = try AppConfig.load()
             let service = GoogleAuthService(config: config)
-            statusText = "Starting sign-in…"
+            statusText = L10n.tr("login_status_starting", "Starting sign-in…")
 
             let response = try await service.signInAndLogin(
                 canceller: oauthCanceller,
@@ -90,13 +111,13 @@ struct LoginView: View {
                 }
             )
             authState.completeLogin(response)
-            statusText = "Signed in."
+            statusText = L10n.tr("login_status_signed_in", "Signed in.")
         } catch {
             if case GoogleAuthService.AuthError.cancelled? = error as? GoogleAuthService.AuthError {
-                statusText = "Sign-in cancelled."
+                statusText = L10n.tr("login_status_cancelled", "Sign-in cancelled.")
             } else {
                 errorMessage = error.localizedDescription
-                statusText = "Sign-in failed."
+                statusText = L10n.tr("login_status_failed", "Sign-in failed.")
             }
         }
 

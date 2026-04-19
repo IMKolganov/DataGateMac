@@ -13,6 +13,15 @@ enum ExtensionLogWriter {
     private static let queue = DispatchQueue(label: "ExtensionLogWriter")
     private static let maxLogSizeBytes = 256 * 1024
 
+    /// Truncates the shared log at the start of a tunnel session (runs in the extension so the host app avoids extra App Group touches on Connect).
+    static func beginNewSession() {
+        queue.sync {
+            guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else { return }
+            let fileURL = container.appendingPathComponent(logFileName)
+            try? Data().write(to: fileURL, options: .atomic)
+        }
+    }
+
     static func append(_ message: String) {
         queue.sync {
             let line = "[\(iso8601())] \(message)"

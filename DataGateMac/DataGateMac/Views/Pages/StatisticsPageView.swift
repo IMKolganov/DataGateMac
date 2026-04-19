@@ -8,15 +8,30 @@
 import SwiftUI
 import Charts
 
-enum StatisticsPreset: String, CaseIterable {
-    case last24h = "Last 24h"
-    case last7d = "Last 7 days"
-    case last30d = "Last 30 days"
-    case thisMonth = "This month"
-    case lastMonth = "Last month"
-    case ytd = "YTD"
-    case last1y = "Last year"
-    case last3y = "Last 3 years"
+enum StatisticsPreset: CaseIterable, Identifiable {
+    case last24h
+    case last7d
+    case last30d
+    case thisMonth
+    case lastMonth
+    case ytd
+    case last1y
+    case last3y
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .last24h: return L10n.tr("stats_preset_last24h", "Last 24h")
+        case .last7d: return L10n.tr("stats_preset_last7d", "Last 7 days")
+        case .last30d: return L10n.tr("stats_preset_last30d", "Last 30 days")
+        case .thisMonth: return L10n.tr("stats_preset_this_month", "This month")
+        case .lastMonth: return L10n.tr("stats_preset_last_month", "Last month")
+        case .ytd: return L10n.tr("stats_preset_ytd", "YTD")
+        case .last1y: return L10n.tr("stats_preset_last1y", "Last year")
+        case .last3y: return L10n.tr("stats_preset_last3y", "Last 3 years")
+        }
+    }
 }
 
 struct ChartPoint: Identifiable {
@@ -43,14 +58,14 @@ struct StatisticsPageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text("Statistics")
+                    Text(L10n.tr("stats_title", "Statistics"))
                         .font(.title2)
                         .fontWeight(.semibold)
                     Spacer()
                     Button {
                         Task { await load() }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(L10n.tr("stats_refresh", "Refresh"), systemImage: "arrow.clockwise")
                     }
                     .disabled(isLoading)
                 }
@@ -71,20 +86,23 @@ struct StatisticsPageView: View {
         .task {
             await load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .appLanguageChanged)) { _ in
+            Task { await load() }
+        }
     }
 
     private var dateFilterSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Date range")
+            Text(L10n.tr("stats_date_range", "Date range"))
                 .font(.headline)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(StatisticsPreset.allCases, id: \.rawValue) { preset in
+                    ForEach(StatisticsPreset.allCases) { preset in
                         Button {
                             applyPreset(preset)
                         } label: {
-                            Text(preset.rawValue)
+                            Text(preset.title)
                                 .font(.caption)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
@@ -100,36 +118,36 @@ struct StatisticsPageView: View {
             HStack(alignment: .center, spacing: 16) {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("From")
+                        Text(L10n.tr("stats_from", "From"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         DatePicker("", selection: $from, displayedComponents: .date)
                             .labelsHidden()
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("To")
+                        Text(L10n.tr("stats_to", "To"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         DatePicker("", selection: $to, displayedComponents: .date)
                             .labelsHidden()
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Grouping")
+                        Text(L10n.tr("stats_grouping", "Grouping"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Picker("", selection: $grouping) {
-                            Text("Auto").tag(OverviewGrouping.auto)
-                            Text("Hours").tag(OverviewGrouping.hours)
-                            Text("Days").tag(OverviewGrouping.days)
-                            Text("Months").tag(OverviewGrouping.months)
-                            Text("Years").tag(OverviewGrouping.years)
+                            Text(L10n.tr("stats_group_auto", "Auto")).tag(OverviewGrouping.auto)
+                            Text(L10n.tr("stats_group_hours", "Hours")).tag(OverviewGrouping.hours)
+                            Text(L10n.tr("stats_group_days", "Days")).tag(OverviewGrouping.days)
+                            Text(L10n.tr("stats_group_months", "Months")).tag(OverviewGrouping.months)
+                            Text(L10n.tr("stats_group_years", "Years")).tag(OverviewGrouping.years)
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
                     }
                 }
                 Spacer(minLength: 0)
-                Button("Apply") {
+                Button(L10n.tr("stats_apply", "Apply")) {
                     Task { await load() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -150,17 +168,17 @@ struct StatisticsPageView: View {
             GridItem(.flexible()),
             GridItem(.flexible()),
         ], spacing: 12) {
-            StatCard(title: "Users", value: "\(t.usersCount)")
-            StatCard(title: "Sessions", value: "\(t.sessionsCount)")
-            StatCard(title: "Traffic IN", value: formatBytes(t.trafficInBytes))
-            StatCard(title: "Traffic OUT", value: formatBytes(t.trafficOutBytes))
-            StatCard(title: "Traffic TOTAL", value: formatBytes(totalBytes))
+            StatCard(title: L10n.tr("stats_users", "Users"), value: "\(t.usersCount)")
+            StatCard(title: L10n.tr("stats_sessions", "Sessions"), value: "\(t.sessionsCount)")
+            StatCard(title: L10n.tr("stats_traffic_in", "Traffic IN"), value: formatBytes(t.trafficInBytes))
+            StatCard(title: L10n.tr("stats_traffic_out", "Traffic OUT"), value: formatBytes(t.trafficOutBytes))
+            StatCard(title: L10n.tr("stats_traffic_total", "Traffic TOTAL"), value: formatBytes(totalBytes))
         }
     }
 
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("User activity & traffic")
+            Text(L10n.tr("stats_activity_title", "User activity & traffic"))
                 .font(.headline)
                 .padding(.top, 8)
                 .padding(.bottom, 18)
@@ -259,7 +277,7 @@ struct StatisticsPageView: View {
     @MainActor
     private func load() async {
         guard let token = await authState.getValidAccessToken() else {
-            errorMessage = "Not authorized"
+            errorMessage = L10n.tr("access_not_authorized", "Not authorized")
             return
         }
         guard !isLoading else { return }
@@ -290,6 +308,7 @@ struct StatisticsPageView: View {
 
     private func formatLabel(_ date: Date, mode: String) -> String {
         let df = DateFormatter()
+        df.locale = L10n.activeLocaleForFormatting()
         switch mode {
         case "hours":
             df.dateFormat = "HH:mm MMM d"
@@ -381,22 +400,26 @@ private struct OverviewChartView: View {
         return data.first { $0.label == label }
     }
 
+    private var axisTime: String { L10n.tr("stats_chart_axis_time", "Time") }
+    private var axisSessions: String { L10n.tr("stats_chart_sessions", "Sessions") }
+    private var axisMb: String { L10n.tr("stats_chart_axis_mb", "MB") }
+
     var body: some View {
         if data.isEmpty {
-            Text("No data")
+            Text(L10n.tr("stats_no_data", "No data"))
                 .foregroundStyle(.secondary)
                 .frame(height: 280)
                 .frame(maxWidth: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Sessions")
+                    Text(L10n.tr("stats_chart_sessions", "Sessions"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Chart(data) { point in
                         AreaMark(
-                            x: .value("Time", point.label),
-                            y: .value("Sessions", point.active)
+                            x: .value(axisTime, point.label),
+                            y: .value(axisSessions, point.active)
                         )
                         .foregroundStyle(
                             LinearGradient(
@@ -407,13 +430,13 @@ private struct OverviewChartView: View {
                         )
                         .interpolationMethod(.catmullRom)
                         LineMark(
-                            x: .value("Time", point.label),
-                            y: .value("Sessions", point.active)
+                            x: .value(axisTime, point.label),
+                            y: .value(axisSessions, point.active)
                         )
                         .foregroundStyle(.blue)
                         .interpolationMethod(.catmullRom)
                         if let sel = selectedLabel, sel == point.label {
-                            RuleMark(x: .value("Time", point.label))
+                            RuleMark(x: .value(axisTime, point.label))
                                 .foregroundStyle(.blue.opacity(0.5))
                                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
                         }
@@ -422,13 +445,13 @@ private struct OverviewChartView: View {
                     .frame(height: 138)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Traffic (MB)")
+                    Text(L10n.tr("stats_chart_traffic_mb", "Traffic (MB)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Chart(data) { point in
                         AreaMark(
-                            x: .value("Time", point.label),
-                            y: .value("MB", Double(point.mb))
+                            x: .value(axisTime, point.label),
+                            y: .value(axisMb, Double(point.mb))
                         )
                         .foregroundStyle(
                             LinearGradient(
@@ -439,13 +462,13 @@ private struct OverviewChartView: View {
                         )
                         .interpolationMethod(.catmullRom)
                         LineMark(
-                            x: .value("Time", point.label),
-                            y: .value("MB", Double(point.mb))
+                            x: .value(axisTime, point.label),
+                            y: .value(axisMb, Double(point.mb))
                         )
                         .foregroundStyle(.green)
                         .interpolationMethod(.catmullRom)
                         if let sel = selectedLabel, sel == point.label {
-                            RuleMark(x: .value("Time", point.label))
+                            RuleMark(x: .value(axisTime, point.label))
                                 .foregroundStyle(.green.opacity(0.5))
                                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4]))
                         }
@@ -461,9 +484,9 @@ private struct OverviewChartView: View {
                         HStack(spacing: 16) {
                             Text(point.label)
                                 .fontWeight(.medium)
-                            Text("Sessions: \(point.active)")
+                            Text(String(format: L10n.tr("stats_tooltip_sessions_fmt", "Sessions: %lld"), locale: L10n.activeLocaleForFormatting(), Int64(point.active)))
                                 .foregroundStyle(.blue)
-                            Text("Traffic: \(point.mb) MB")
+                            Text(String(format: L10n.tr("stats_tooltip_traffic_mb_fmt", "Traffic: %lld MB"), locale: L10n.activeLocaleForFormatting(), Int64(point.mb)))
                                 .foregroundStyle(.green)
                         }
                         .font(.caption)

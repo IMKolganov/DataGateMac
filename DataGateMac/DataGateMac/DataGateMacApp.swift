@@ -9,6 +9,12 @@ import SwiftUI
 
 @main
 struct DataGateMacApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    init() {
+        AppLanguageStorage.normalizeIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

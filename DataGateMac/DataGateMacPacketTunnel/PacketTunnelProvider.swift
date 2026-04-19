@@ -42,6 +42,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private var openVpnEngineWarningLogged = false
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        ExtensionLogWriter.beginNewSession()
+
         /// Any failure: log to shared file and complete with error so the extension never crashes and the app can see the reason (via extension log or status).
         func fail(_ error: Error) {
             let msg = "[Ext] FAIL: \(error.localizedDescription)"

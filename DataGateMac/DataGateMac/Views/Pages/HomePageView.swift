@@ -3,6 +3,7 @@
 //  DataGateMac
 //
 
+import AppKit
 import SwiftUI
 
 struct HomePageView: View {
@@ -14,15 +15,18 @@ struct HomePageView: View {
         _vm = StateObject(wrappedValue: VpnViewModel(authState: authState))
     }
 
+    private var extensionSeparator: String {
+        L10n.tr("vpn_extension_log_separator", "--- Extension ---")
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Welcome to DataGate")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+            VStack(alignment: .leading, spacing: 16) {
+                Text(L10n.tr("home_welcome", "Welcome to DataGate"))
+                    .font(.system(size: 20, weight: .semibold))
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Connection status")
+                homeCard {
+                    Text(L10n.tr("home_conn_status", "Connection status"))
                         .fontWeight(.semibold)
                     Text(vm.statusText)
                         .foregroundStyle(.secondary)
@@ -32,42 +36,47 @@ struct HomePageView: View {
                             .foregroundStyle(.primary)
                     }
                     HStack(spacing: 12) {
-                        Button(vm.isConnected ? "Disconnect" : "Connect") {
-                            vm.toggle()
+                        Button(L10n.tr("home_connect", "Connect")) {
+                            vm.connect()
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(vm.isBusy)
+                        .frame(minWidth: 140)
+                        .disabled(!vm.canTapConnect)
+
+                        Button(L10n.tr("home_disconnect", "Disconnect")) {
+                            vm.disconnect()
+                        }
+                        .buttonStyle(.bordered)
+                        .frame(minWidth: 140)
+                        .disabled(!vm.canTapDisconnect)
                     }
+                    .padding(.top, 4)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 if vm.statusText.contains("code 14") || vm.showVpnProfileResetSuggestion {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(vm.showVpnProfileResetSuggestion
-                            ? "macOS may be blocking VPN profile updates (permission denied or error 5)."
-                            : "If tunnel failed with code 14:")
+                            ? L10n.tr("home_vpn_warn_blocked", "macOS may be blocking VPN profile updates (permission denied or error 5).")
+                            : L10n.tr("home_vpn_warn_code14", "If tunnel failed with code 14:"))
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
-                        Button("Remove VPN profile and recreate") {
+                        Button(L10n.tr("home_remove_vpn_profile", "Remove VPN profile and recreate")) {
                             Task { await vm.resetVpnProfile() }
                         }
                         .buttonStyle(.bordered)
                         .disabled(vm.isBusy)
                         Text(vm.showVpnProfileResetSuggestion
-                            ? "Clears the saved DataGate VPN entry, then try Connect again and allow the system prompt. Also remove DataGate in System Settings → VPN if it still appears."
-                            : "Use after copying the app to /Applications: clears the saved DataGate VPN entry so Connect registers the tunnel again.")
+                            ? L10n.tr("home_vpn_hint_blocked", "Clears the saved DataGate VPN entry, then try Connect again and allow the system prompt. Also remove DataGate in System Settings → VPN if it still appears.")
+                            : L10n.tr("home_vpn_hint_code14", "Use after copying the app to /Applications: clears the saved DataGate VPN entry so Connect registers the tunnel again."))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        Button("Copy command to capture system log") {
+                        Button(L10n.tr("home_copy_log", "Copy command to capture system log")) {
                             let cmd = "/usr/bin/log show --last 2m 2>&1 | grep -iE \"networkextension|neagent\" | grep -v \"DataGateMac:\" > ~/Desktop/DataGateMac_NE_log.txt && open ~/Desktop/DataGateMac_NE_log.txt"
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(cmd, forType: .string)
                         }
                         .buttonStyle(.bordered)
-                        Text("Run in Terminal right after reproducing; then check the opened file for the real error.")
+                        Text(L10n.tr("home_log_cmd_hint", "Run in Terminal right after reproducing; then check the opened file for the real error."))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -76,14 +85,14 @@ struct HomePageView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Engine logs")
+                homeCard {
+                    Text(L10n.tr("home_engine_logs", "Engine logs"))
                         .fontWeight(.semibold)
                     TextEditor(text: Binding(
                         get: {
                             vm.extensionLogText.isEmpty
                                 ? vm.logText
-                                : vm.logText + "\n--- Extension ---\n" + vm.extensionLogText
+                                : vm.logText + "\n" + extensionSeparator + "\n" + vm.extensionLogText
                         },
                         set: { _ in }
                     ))
@@ -95,20 +104,34 @@ struct HomePageView: View {
                     .padding(8)
                 }
             }
-            .padding(24)
+            .padding(20)
         }
         .frame(minWidth: 400, minHeight: 400)
         .task { await vm.ensureConfigurationLoaded() }
-        .alert("Reset VPN profile?", isPresented: $vm.showVpnProfileResetAlert) {
-            Button("Remove saved profile") {
+        .alert(L10n.tr("home_alert_reset_title", "Reset VPN profile?"), isPresented: $vm.showVpnProfileResetAlert) {
+            Button(L10n.tr("home_alert_remove", "Remove saved profile")) {
                 Task { await vm.resetVpnProfile() }
             }
-            Button("Not now", role: .cancel) {
+            Button(L10n.tr("home_alert_not_now", "Not now"), role: .cancel) {
                 vm.dismissVpnProfileResetAlertOnly()
             }
         } message: {
-            Text("macOS blocked updating the VPN configuration (often error 5 or permission denied). Removing the in-app DataGate profile and trying Connect again usually fixes it. You can also use System Settings → VPN.")
+            Text(L10n.tr("home_alert_reset_msg", "macOS blocked updating the VPN configuration (often error 5 or permission denied). Removing the in-app DataGate profile and trying Connect again usually fixes it. You can also use System Settings → VPN."))
         }
+    }
+
+    private func homeCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12, content: content)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
     }
 }
 

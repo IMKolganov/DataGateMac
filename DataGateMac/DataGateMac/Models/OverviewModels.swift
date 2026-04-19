@@ -108,6 +108,12 @@ struct TotalsPayloadDto: Decodable {
         trafficInBytes = (try? c.decode(Int64.self, forKey: .trafficInBytes)) ?? 0
         trafficOutBytes = (try? c.decode(Int64.self, forKey: .trafficOutBytes)) ?? 0
         let total = try? c.decodeIfPresent(Int64.self, forKey: .trafficTotalBytes)
-        trafficTotalBytes = total ?? trafficInBytes + trafficOutBytes
+        trafficTotalBytes = total
+    }
+
+    /// Total traffic for quota progress (matches Linux `readOverviewTrafficUsedBytes`).
+    var resolvedTrafficBytes: Int64 {
+        if let t = trafficTotalBytes, t >= 0 { return t }
+        return trafficInBytes + trafficOutBytes
     }
 }
