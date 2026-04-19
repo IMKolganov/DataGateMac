@@ -31,6 +31,10 @@ final class VpnViewModel: ObservableObject {
     @Published var logText: String = ""
     /// Log lines written by the packet tunnel extension (read from App Group shared file); polled every second.
     @Published var extensionLogText: String = ""
+    /// Inline troubleshooting (code 14 or VPN permission / error 5).
+    @Published var showVpnProfileResetSuggestion = false
+    /// One-shot alert after a configuration error; dismissing it keeps `showVpnProfileResetSuggestion` true.
+    @Published var showVpnProfileResetAlert = false
 
     private let tunnelManager = VpnTunnelManager()
     private var extensionLogPollTimer: Timer?
@@ -96,8 +100,14 @@ final class VpnViewModel: ObservableObject {
         do {
             try await tunnelManager.loadOrCreateConfiguration()
             appendLog("[Connect flow] Step 0: tunnel configuration ready.")
+            showVpnProfileResetSuggestion = false
+            showVpnProfileResetAlert = false
         } catch {
             appendLog("[Connect flow] Step 0 FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "loading VPN configuration"))")
+            if shouldOfferVpnProfileResetAfterConfigurationError(error) {
+                showVpnProfileResetSuggestion = true
+                showVpnProfileResetAlert = true
+            }
         }
         isPreparing = false
         syncFromTunnel()
@@ -137,8 +147,14 @@ final class VpnViewModel: ObservableObject {
                 try await tunnelManager.reloadFromPreferences()
                 try tunnelManager.startTunnel()
                 appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
+                showVpnProfileResetSuggestion = false
+                showVpnProfileResetAlert = false
             } catch {
                 appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorEnglishDescription(error, action: "updating VPN configuration"))")
+                if shouldOfferVpnProfileResetAfterConfigurationError(error) {
+                    showVpnProfileResetSuggestion = true
+                    showVpnProfileResetAlert = true
+                }
                 tunnelManager.stopTunnel()
             }
         }
@@ -159,6 +175,8 @@ final class VpnViewModel: ObservableObject {
             try await tunnelManager.removeDataGateFromPreferences()
             try await tunnelManager.loadOrCreateConfiguration()
             appendLog("[Connect flow] Reset VPN profile: done. Try Connect again.")
+            showVpnProfileResetSuggestion = false
+            showVpnProfileResetAlert = false
         } catch {
             appendLog("[Connect flow] Reset VPN profile FAIL: \(tunnelConfigurationErrorEnglishDescription(error, action: "resetting VPN configuration"))")
         }
@@ -177,6 +195,15 @@ final class VpnViewModel: ObservableObject {
         }
         isConnected = tunnelManager.isConnected
         isBusy = connectInProgress || isPreparing || tunnelManager.isConnectingOrConnected
+    }
+
+    func dismissVpnProfileResetAlertOnly() {
+        showVpnProfileResetAlert = false
+    }
+
+    func dismissVpnProfileResetSuggestion() {
+        showVpnProfileResetSuggestion = false
+        showVpnProfileResetAlert = false
     }
 
     private func appendLog(_ line: String) {

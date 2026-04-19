@@ -14,16 +14,15 @@ enum TunnelConstants {
 
 /// Host app install path vs DerivedData (Launch Services / plugin registration).
 enum AppBundleLocation {
-    /// Running from `/Applications` or `~/Applications`, not from Xcode DerivedData.
+    /// True when the .app lives under a folder named `Applications` (system or per-user), not under Xcode build products.
+    /// Note: Sandboxed apps may resolve `homeDirectoryForCurrentUser` to the container, so we do not compare only to `~/Applications`.
     static var isStandardApplicationsInstall: Bool {
         let bundleURL = Bundle.main.bundleURL.resolvingSymlinksInPath().standardizedFileURL
-        let parentURL = bundleURL.deletingLastPathComponent()
-        let systemAppsURL = URL(fileURLWithPath: "/Applications", isDirectory: true).standardizedFileURL
-        let userAppsURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Applications", isDirectory: true)
-            .resolvingSymlinksInPath()
-            .standardizedFileURL
-        return parentURL == systemAppsURL || parentURL == userAppsURL
+        let path = bundleURL.path
+        if path.contains("/DerivedData/") { return false }
+        if path.contains("/Build/Products/") { return false }
+        let parent = bundleURL.deletingLastPathComponent()
+        return parent.lastPathComponent == "Applications"
     }
 }
 
@@ -39,7 +38,7 @@ enum VpnDiagnostics {
         lines.append("[Diagnostics] Main bundle ID: \(main.bundleIdentifier ?? "(nil)")")
         lines.append("[Diagnostics] Executable: \(main.executablePath ?? "(nil)")")
         let fromApps = AppBundleLocation.isStandardApplicationsInstall
-        lines.append("[Diagnostics] Installed under Applications (system or ~/Applications): \(fromApps ? "yes" : "no (DerivedData/Xcode — common cause of code 14)")")
+        lines.append("[Diagnostics] Installed under an Applications folder (not DerivedData/build products): \(fromApps ? "yes" : "no (Xcode build path — common cause of code 14)")")
 
         let pluginsURL = main.bundleURL.appendingPathComponent("Contents/PlugIns", isDirectory: true)
         lines.append("[Diagnostics] --- PlugIns ---")

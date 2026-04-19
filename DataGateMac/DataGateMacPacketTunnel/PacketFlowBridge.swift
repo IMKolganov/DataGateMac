@@ -25,6 +25,7 @@ final class PacketFlowBridge {
 
     /// Start reading packets from the tunnel. Each packet is passed to onPacketFromTun (or dropped if nil).
     func startReadLoop() {
+        ExtensionLogWriter.append("[PacketFlowBridge] startReadLoop: reading from NEPacketTunnelFlow (handlerInstalled=\(onPacketFromTun != nil))")
         queue.async { [weak self] in
             self?.readLoop()
         }

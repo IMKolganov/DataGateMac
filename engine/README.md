@@ -1,6 +1,6 @@
 # DataGateMac engine — OpenVPN 3 core for macOS
 
-This directory builds the **OpenVPN 3 core** as a static library for macOS, mirroring the approach used in **DataGateWin/engine**: same source set from the `openvpn3` git submodule, same dependency set (OpenSSL, fmt, jsoncpp, lz4, xxhash, asio).
+This directory builds the **OpenVPN 3 core** as a static library for macOS, mirroring the approach used in **DataGateWin/engine**: same source set from the `openvpn3` git submodule, same dependency set (OpenSSL, fmt, lz4, xxhash, asio). **jsoncpp** is fetched by CMake (static) so the packet tunnel appex does not link Homebrew `libjsoncpp` dylibs (Team ID mismatch at extension load).
 
 ## Purpose
 
@@ -13,10 +13,10 @@ So far this folder only builds **ovpn3-core**. The WSS bridge and session code (
 
 ## Dependencies (macOS, Homebrew)
 
-Same logical deps as DataGateWin/engine (OpenSSL, fmt, jsoncpp, lz4, xxhash, asio); on Mac we use Homebrew:
+Same logical deps as DataGateWin/engine (OpenSSL, fmt, lz4, xxhash, asio); on Mac we use Homebrew. **jsoncpp** is built from source by this CMake project (no `brew install jsoncpp` required).
 
 ```bash
-brew install asio cmake fmt jsoncpp lz4 openssl pkg-config xxhash
+brew install asio cmake fmt lz4 openssl pkg-config xxhash
 ```
 
 | Package   | Purpose (openvpn3) |
@@ -24,7 +24,7 @@ brew install asio cmake fmt jsoncpp lz4 openssl pkg-config xxhash
 | OpenSSL  | TLS/crypto           |
 | asio     | Async I/O (header-only) |
 | fmt      | Formatting           |
-| jsoncpp  | JSON (optional in core) |
+| jsoncpp  | JSON — vendored via CMake FetchContent → `build-engine/libjsoncpp.a` |
 | lz4      | Compression          |
 | xxhash   | Hashing              |
 
@@ -47,7 +47,7 @@ cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_PREFIX_PATH=/usr/local/o
 cmake --build .
 ```
 
-Output: **`build-engine/libovpn3-core.a`** (static library).
+Output: **`build-engine/libovpn3-core.a`** and **`build-engine/libjsoncpp.a`** (static archives). Xcode links both into **DataGateMacPacketTunnel** together with static OpenSSL/fmt/lz4/xxhash from Homebrew (see target `HOMEBREW_PREFIX`; use `/usr/local` on Intel when adjusting Xcode build settings).
 
 ## What gets built
 

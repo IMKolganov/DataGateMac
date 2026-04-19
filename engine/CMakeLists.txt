@@ -22,10 +22,23 @@ endif()
 # Use openvpn3's Findasio.cmake if needed (asio is header-only)
 set(CMAKE_MODULE_PATH "${O3_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
-# Dependencies (Homebrew: brew install asio cmake fmt jsoncpp lz4 openssl pkg-config xxhash)
+# jsoncpp: build static here so the packet tunnel appex does not link Homebrew dylibs (Team ID mismatch at extension load).
+include(FetchContent)
+set(JSONCPP_WITH_TESTS OFF CACHE BOOL "" FORCE)
+set(JSONCPP_WITH_POST_BUILD_UNITTEST OFF CACHE BOOL "" FORCE)
+# jsoncpp uses BUILD_SHARED_LIBS / BUILD_STATIC_LIBS (not only BUILD_SHARED_LIBS).
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  jsoncpp
+  GIT_REPOSITORY https://github.com/open-source-parsers/jsoncpp.git
+  GIT_TAG 1.9.6
+)
+FetchContent_MakeAvailable(jsoncpp)
+
+# Dependencies (Homebrew: brew install asio cmake fmt lz4 openssl pkg-config xxhash — jsoncpp is vendored above)
 find_package(OpenSSL REQUIRED)
 find_package(fmt CONFIG REQUIRED)
-find_package(jsoncpp CONFIG REQUIRED)
 find_package(lz4 REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 find_package(asio REQUIRED)
@@ -49,6 +62,7 @@ target_compile_definitions(ovpn3-core PUBLIC
   USE_OPENSSL
   HAVE_LZ4
   ASIO_STANDALONE
+  USE_TUN_BUILDER
 )
 
 # macOS system frameworks (same as openvpn3 findcoredeps for APPLE)
@@ -61,7 +75,7 @@ target_link_libraries(ovpn3-core PUBLIC
   OpenSSL::SSL
   OpenSSL::Crypto
   fmt::fmt
-  JsonCpp::JsonCpp
+  jsoncpp_static
   lz4::lz4
   xxHash::xxhash
   asio::asio
@@ -70,6 +84,15 @@ target_link_libraries(ovpn3-core PUBLIC
   ${iokit}
   ${coreServices}
   ${systemConfiguration}
+)
+
+# Single path for Xcode: link libjsoncpp.a next to libovpn3-core.a (static; avoids /opt/homebrew jsoncpp dylib).
+add_custom_command(
+  TARGET ovpn3-core POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:jsoncpp_static>
+    ${CMAKE_BINARY_DIR}/libjsoncpp.a
+  COMMENT "Export libjsoncpp.a for DataGateMacPacketTunnel (static link)"
 )
 
 # Allow alternate fmt target name (vcpkg uses fmt-header-only)

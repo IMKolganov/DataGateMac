@@ -18,6 +18,7 @@
 		DA7F10012FD3022200A1B2C3 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */; };
 		DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */; };
 		DAB100022FD3000100A1B2C3 /* libovpn3-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB100062FD3000100A1B2C3 /* libovpn3-core.a */; };
+		DAB100092FD3000100A1B2C3 /* libjsoncpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB100072FD3000100A1B2C3 /* libjsoncpp.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +84,7 @@
 		DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OpenVPNRunnerBridge.mm; sourceTree = "<group>"; };
 		DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DataGateMacPacketTunnel-Bridging-Header.h"; sourceTree = "<group>"; };
 		DAB100062FD3000100A1B2C3 /* libovpn3-core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libovpn3-core.a; path = ../build-engine/libovpn3-core.a; sourceTree = SOURCE_ROOT; };
+		DAB100072FD3000100A1B2C3 /* libjsoncpp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libjsoncpp.a; path = ../build-engine/libjsoncpp.a; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -110,6 +112,7 @@
 				DA5124E52F2F807100C61F86 /* Network.framework in Frameworks */,
 				DA7F10012FD3022200A1B2C3 /* SystemConfiguration.framework in Frameworks */,
 				DAB100022FD3000100A1B2C3 /* libovpn3-core.a in Frameworks */,
+				DAB100092FD3000100A1B2C3 /* libjsoncpp.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -158,6 +161,7 @@
 				DA5124E42F2F807100C61F86 /* Network.framework */,
 				DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */,
 				DAB100062FD3000100A1B2C3 /* libovpn3-core.a */,
+				DAB100072FD3000100A1B2C3 /* libjsoncpp.a */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -495,23 +499,22 @@
 					USE_ASIO,
 					USE_OPENSSL,
 					HAVE_LZ4,
-					FMT_SHARED,
+					USE_TUN_BUILDER,
 					XXH_EXPORT,
 				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HOMEBREW_PREFIX = /opt/homebrew;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../openvpn3",
 					"$(PROJECT_DIR)/../openvpn3/client",
-					"/opt/homebrew/include",
-					"/opt/homebrew/opt/openssl/include",
+					"$(HOMEBREW_PREFIX)/include",
+					"$(HOMEBREW_PREFIX)/opt/openssl/include",
 				);
 				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../build-engine",
-					"/opt/homebrew/lib",
-					"/opt/homebrew/opt/openssl/lib",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -527,12 +530,13 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lc++",
-					"-lcrypto",
-					"-lfmt",
-					"-ljsoncpp",
-					"-llz4",
-					"-lssl",
-					"-lxxhash",
+					"-Wl,-search_paths_first",
+					"$(HOMEBREW_PREFIX)/opt/openssl@3/lib/libssl.a",
+					"$(HOMEBREW_PREFIX)/opt/openssl@3/lib/libcrypto.a",
+					"$(HOMEBREW_PREFIX)/opt/fmt/lib/libfmt.a",
+					"$(HOMEBREW_PREFIX)/opt/lz4/lib/liblz4.a",
+					"$(HOMEBREW_PREFIX)/opt/xxhash/lib/libxxhash.a",
+					"-lz",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -559,23 +563,22 @@
 					USE_ASIO,
 					USE_OPENSSL,
 					HAVE_LZ4,
-					FMT_SHARED,
+					USE_TUN_BUILDER,
 					XXH_EXPORT,
 				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HOMEBREW_PREFIX = /opt/homebrew;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../openvpn3",
 					"$(PROJECT_DIR)/../openvpn3/client",
-					"/opt/homebrew/include",
-					"/opt/homebrew/opt/openssl/include",
+					"$(HOMEBREW_PREFIX)/include",
+					"$(HOMEBREW_PREFIX)/opt/openssl/include",
 				);
 				INFOPLIST_FILE = DataGateMacPacketTunnel/Info.plist;
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../build-engine",
-					"/opt/homebrew/lib",
-					"/opt/homebrew/opt/openssl/lib",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -591,12 +594,13 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lc++",
-					"-lcrypto",
-					"-lfmt",
-					"-ljsoncpp",
-					"-llz4",
-					"-lssl",
-					"-lxxhash",
+					"-Wl,-search_paths_first",
+					"$(HOMEBREW_PREFIX)/opt/openssl@3/lib/libssl.a",
+					"$(HOMEBREW_PREFIX)/opt/openssl@3/lib/libcrypto.a",
+					"$(HOMEBREW_PREFIX)/opt/fmt/lib/libfmt.a",
+					"$(HOMEBREW_PREFIX)/opt/lz4/lib/liblz4.a",
+					"$(HOMEBREW_PREFIX)/opt/xxhash/lib/libxxhash.a",
+					"-lz",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";

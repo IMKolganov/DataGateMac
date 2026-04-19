@@ -163,6 +163,15 @@ func tunnelConfigurationErrorEnglishDescription(_ error: Error, action: String) 
     return "\(ns.localizedDescription) [\(ns.domain) code \(ns.code)]"
 }
 
+/// True when resetting the saved VPN profile is a reasonable next step (permission / stale profile).
+func shouldOfferVpnProfileResetAfterConfigurationError(_ error: Error) -> Bool {
+    let ns = error as NSError
+    if ns.domain == NEVPNErrorDomain, ns.code == NEVPNError.configurationReadWriteFailed.rawValue { return true }
+    if ns.domain == "NEConfigurationErrorDomain", ns.code == 10 { return true }
+    let lower = ns.localizedDescription.lowercased()
+    return lower.contains("permission denied")
+}
+
 @MainActor
 final class VpnTunnelManager: ObservableObject {
     /// Current tunnel status (for UI).
@@ -392,7 +401,7 @@ final class VpnTunnelManager: ObservableObject {
         let appPath = Bundle.main.bundlePath
         onLog?("[Tunnel] App path: \(appPath)")
         if !AppBundleLocation.isStandardApplicationsInstall {
-            onLog?("[Tunnel] WARNING: Not under /Applications or ~/Applications. Extension often fails (code 14). Quit, open DataGateMac.app from Finder (Applications folder), then Connect.")
+            onLog?("[Tunnel] WARNING: App is not under an Applications folder (or is running from Xcode build output). Extension often fails (code 14). Install under /Applications or ~/Applications, open from Finder, then Connect.")
         }
         onLog?("[Tunnel] Step: calling startVPNTunnel()...")
         guard let manager else {

@@ -39,9 +39,11 @@ struct HomePageView: View {
                 .background(.quaternary.opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                if vm.statusText.contains("code 14") {
+                if vm.statusText.contains("code 14") || vm.showVpnProfileResetSuggestion {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("If tunnel failed with code 14:")
+                        Text(vm.showVpnProfileResetSuggestion
+                            ? "macOS may be blocking VPN profile updates (permission denied or error 5)."
+                            : "If tunnel failed with code 14:")
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                         Button("Remove VPN profile and recreate") {
@@ -49,7 +51,9 @@ struct HomePageView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(vm.isBusy)
-                        Text("Use after copying the app to /Applications: clears the saved DataGate VPN entry so Connect registers the tunnel again.")
+                        Text(vm.showVpnProfileResetSuggestion
+                            ? "Clears the saved DataGate VPN entry, then try Connect again and allow the system prompt. Also remove DataGate in System Settings → VPN if it still appears."
+                            : "Use after copying the app to /Applications: clears the saved DataGate VPN entry so Connect registers the tunnel again.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                         Button("Copy command to capture system log") {
@@ -90,6 +94,16 @@ struct HomePageView: View {
         }
         .frame(minWidth: 400, minHeight: 400)
         .task { await vm.ensureConfigurationLoaded() }
+        .alert("Reset VPN profile?", isPresented: $vm.showVpnProfileResetAlert) {
+            Button("Remove saved profile") {
+                Task { await vm.resetVpnProfile() }
+            }
+            Button("Not now", role: .cancel) {
+                vm.dismissVpnProfileResetAlertOnly()
+            }
+        } message: {
+            Text("macOS blocked updating the VPN configuration (often error 5 or permission denied). Removing the in-app DataGate profile and trying Connect again usually fixes it. You can also use System Settings → VPN.")
+        }
     }
 }
 

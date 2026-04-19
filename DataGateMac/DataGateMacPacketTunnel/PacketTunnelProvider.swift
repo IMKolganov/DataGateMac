@@ -7,6 +7,7 @@
 //  Status is reported to the app indirectly via NEVPNStatus (system).
 //
 
+import Darwin
 import NetworkExtension
 import os.log
 
@@ -71,15 +72,19 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let host = (providerConfig["host"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let port = (providerConfig["port"] as? Int) ?? 443
-        let path = providerConfig["path"] as? String ?? "/"
+        let pathRaw = providerConfig["path"] as? String ?? "/"
+        let pathNormalized = pathRaw.hasPrefix("/") ? pathRaw : "/" + pathRaw
         let listenPort = (providerConfig["listenPort"] as? Int) ?? 18080
         let verifyServerCert = (providerConfig["verifyServerCert"] as? Bool) ?? false
         let linkProtocol = providerConfig["linkProtocol"] as? String ?? "tcp"
         let ovpnContent = providerConfig["ovpnContent"] as? String ?? ""
         let hasOvpn = !ovpnContent.isEmpty
+        let upstreamWss = "wss://\(host):\(port)\(pathNormalized)"
 
-        log.info("[Ext] Step 1: config host=\(host) port=\(port) path=\(path) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn)")
-        ExtensionLogWriter.append("[Ext] Step 1: config host=\(host) port=\(port) path=\(path) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn)")
+        log.info("[Ext] Step 1: config host=\(host) port=\(port) path=\(pathNormalized) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn)")
+        ExtensionLogWriter.append("[Ext] Step 1: providerConfiguration host=\(host) remotePort=\(port) path=\(pathNormalized) linkProtocol=\(linkProtocol) verifyServerCert=\(verifyServerCert)")
+        ExtensionLogWriter.append("[Ext] Step 1: upstream WebSocket target \(upstreamWss)")
+        ExtensionLogWriter.append("[Ext] Step 1: local OpenVPN TCP target 127.0.0.1:\(listenPort) (WSS bridge listen) ovpnBytes=\(ovpnContent.utf8.count)")
 
         guard !host.isEmpty else {
             fail(PacketTunnelStartupError.missingHost)
@@ -90,54 +95,114 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        log.info("[Ext] Step 2: starting WSS bridge (TCP 127.0.0.1:\(listenPort) <-> wss://host:port/path)")
-        ExtensionLogWriter.append("[Ext] Step 2: starting WSS bridge (TCP 127.0.0.1:\(listenPort) <-> wss://host:port/path)")
-        let bridge = WSSBridge(host: host, port: port, path: path, listenPort: listenPort, verifyServerCert: verifyServerCert, log: log)
+        log.info("[Ext] Step 2: starting WSS bridge (TCP 127.0.0.1:\(listenPort) <-> \(upstreamWss))")
+        ExtensionLogWriter.append("[Ext] Step 2: start WSS bridge local_listen=127.0.0.1:\(listenPort)/tcp upstream=\(upstreamWss)")
+        let bridge = WSSBridge(host: host, port: port, path: pathRaw, listenPort: listenPort, verifyServerCert: verifyServerCert, log: log)
         wssBridge = bridge
+
+        var localTcpTimeoutWorkItem: DispatchWorkItem?
+        func cancelLocalTcpTimeout() {
+            localTcpTimeoutWorkItem?.cancel()
+            localTcpTimeoutWorkItem = nil
+        }
+
+        bridge.onFirstLocalTcpAccepted = { [weak self] in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                cancelLocalTcpTimeout()
+                self.log.info("[Ext] Step 3: first local TCP to bridge; setTunnelNetworkSettings (placeholder)...")
+                ExtensionLogWriter.append("[Ext] Step 3: first TCP to local bridge (127.0.0.1:\(listenPort)); applying setTunnelNetworkSettings then packetFlow; upstream remains \(upstreamWss)")
+                let tunnelNetworkSettings = self.createTunnelNetworkSettings()
+                self.setTunnelNetworkSettings(tunnelNetworkSettings) { error in
+                    if let error {
+                        fail(error)
+                        return
+                    }
+                    self.log.info("[Ext] Step 3: network settings applied")
+                    ExtensionLogWriter.append("[Ext] Step 3: setTunnelNetworkSettings OK (IPv4 placeholder 10.8.0.2/24, excluded 127.0.0.0/8)")
+                    self.log.info("[Ext] Step 4: starting packetFlow read loop")
+                    ExtensionLogWriter.append("[Ext] Step 4: packetFlow read loop start (TUN packets; OpenVPN hook may be nil)")
+                    let flowBridge = PacketFlowBridge(packetFlow: self.packetFlow, log: self.log)
+                    self.packetFlowBridge = flowBridge
+                    flowBridge.onPacketFromTun = { [weak self] packet in
+                        guard let self, let runner = self.openVpnRunner, !packet.isEmpty else { return }
+                        let ver = (packet[packet.startIndex] >> 4) & 0x0F
+                        let family: Int32
+                        if ver == 4 {
+                            family = AF_INET
+                        } else if ver == 6 {
+                            family = AF_INET6
+                        } else {
+                            return
+                        }
+                        runner.injectDataPackets(fromTunnel: [packet], protocols: [NSNumber(value: family)])
+                    }
+                    flowBridge.startReadLoop()
+                    succeed()
+                }
+            }
+        }
+
         bridge.start { [weak self] bridgeError in
             guard let self else { return }
             if let bridgeError {
+                cancelLocalTcpTimeout()
                 fail(bridgeError)
                 return
             }
             self.log.info("[Ext] Step 2: WSS bridge listening")
             ExtensionLogWriter.append("[Ext] Step 2: WSS bridge listening")
-            self.log.info("[Ext] Step 3: setTunnelNetworkSettings (placeholder)...")
-            ExtensionLogWriter.append("[Ext] Step 3: setTunnelNetworkSettings (placeholder)...")
-            let tunnelNetworkSettings = self.createTunnelNetworkSettings()
-            self.setTunnelNetworkSettings(tunnelNetworkSettings) { error in
-                if let error {
-                    fail(error)
-                    return
-                }
-                self.log.info("[Ext] Step 3: network settings applied")
-                ExtensionLogWriter.append("[Ext] Step 3: network settings applied")
-                self.log.info("[Ext] Step 4: starting packetFlow read loop")
-                ExtensionLogWriter.append("[Ext] Step 4: starting packetFlow read loop")
-                let flowBridge = PacketFlowBridge(packetFlow: self.packetFlow, log: self.log)
-                self.packetFlowBridge = flowBridge
-                flowBridge.startReadLoop()
-                let runner = OpenVPNRunnerBridge { line in
-                    ExtensionLogWriter.append(line)
-                }
-                self.openVpnRunner = runner
-                do {
-                    try runner.prepare(withOvpnContent: ovpnContent)
-                    self.log.info("[Ext] Step 5: OpenVPN3 bridge prepared (eval_config OK)")
-                    ExtensionLogWriter.append("[Ext] Step 5: OpenVPN3 bridge prepared (eval_config OK)")
-                    runner.start()
-                    self.log.info("[Ext] Step 6: OpenVPN3 connect() requested")
-                    ExtensionLogWriter.append("[Ext] Step 6: OpenVPN3 connect() requested")
-                } catch {
-                    let message = error.localizedDescription
-                    self.log.error("[Ext] Step 5: OpenVPN3 prepare failed: \(message)")
-                    ExtensionLogWriter.append("[Ext] Step 5: OpenVPN3 prepare failed: \(message)")
-                    if !self.openVpnEngineWarningLogged {
-                        self.openVpnEngineWarningLogged = true
-                        ExtensionLogWriter.append("[Ext] Step 5: OpenVPN runner is linked, but full connect() / packetFlow wiring is still pending")
+
+            let runner = OpenVPNRunnerBridge { line in
+                ExtensionLogWriter.append(line)
+            }
+            self.openVpnRunner = runner
+            runner.setPacketFlow(self.packetFlow)
+            runner.setWssProxyHostnameForExclusion(host)
+            runner.setNetworkSettingsUpdateHandler { [weak self] settings in
+                guard let self else { return }
+                self.setTunnelNetworkSettings(settings) { error in
+                    if let error {
+                        ExtensionLogWriter.append("[Ext] setTunnelNetworkSettings (OpenVPN PUSH) failed: \(error.localizedDescription)")
+                    } else {
+                        ExtensionLogWriter.append("[Ext] setTunnelNetworkSettings applied from OpenVPN PUSH (IPv4, default route, DNS, exclusions)")
                     }
                 }
-                succeed()
+            }
+            do {
+                try runner.prepare(withOvpnContent: ovpnContent)
+                self.log.info("[Ext] Step 5: OpenVPN3 bridge prepared (eval_config OK)")
+                ExtensionLogWriter.append("[Ext] Step 5: OpenVPN3 bridge prepared (eval_config OK)")
+                let timeoutSeconds: TimeInterval = 45
+                let timeout = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    let detail = "No inbound TCP to WSS bridge within \(Int(timeoutSeconds))s. Expected OpenVPN -> 127.0.0.1:\(listenPort)/tcp then relay -> \(upstreamWss)"
+                    let err = NSError(
+                        domain: "PacketTunnelProvider",
+                        code: -2,
+                        userInfo: [NSLocalizedDescriptionKey: detail]
+                    )
+                    self.log.error("[Ext] \(detail)")
+                    ExtensionLogWriter.append("[Ext] FAIL: timeout \(Int(timeoutSeconds))s waiting first TCP to 127.0.0.1:\(listenPort) (bridge) while upstream=\(upstreamWss)")
+                    fail(err)
+                }
+                localTcpTimeoutWorkItem = timeout
+                ExtensionLogWriter.append("[Ext] Step 6: arm local TCP watchdog \(Int(timeoutSeconds))s (until first client hits 127.0.0.1:\(listenPort))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds, execute: timeout)
+
+                runner.start()
+                self.log.info("[Ext] Step 6: OpenVPN3 connect() requested (tunnel routes applied after first local TCP)")
+                ExtensionLogWriter.append("[Ext] Step 6: OpenVPN3 connect() on worker thread (dials 127.0.0.1:\(listenPort) per OVPN); tunnel IPv4 applied only after that TCP is accepted")
+            } catch {
+                cancelLocalTcpTimeout()
+                let message = error.localizedDescription
+                self.log.error("[Ext] Step 5: OpenVPN3 prepare failed: \(message)")
+                ExtensionLogWriter.append("[Ext] Step 5: OpenVPN3 prepare failed: \(message)")
+                if !self.openVpnEngineWarningLogged {
+                    self.openVpnEngineWarningLogged = true
+                    ExtensionLogWriter.append("[Ext] Step 5: OpenVPN runner is linked, but full connect() / packetFlow wiring is still pending")
+                }
+                fail(error)
             }
         }
     }
@@ -175,7 +240,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // Placeholder: a minimal IPv4 setting so the tunnel interface exists.
         // Real implementation uses addresses/routes pushed by OpenVPN.
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "10.8.0.1")
-        settings.ipv4Settings = NEIPv4Settings(addresses: ["10.8.0.2"], subnetMasks: ["255.255.255.0"])
+        let ipv4 = NEIPv4Settings(addresses: ["10.8.0.2"], subnetMasks: ["255.255.255.0"])
+        // Without this, some systems route 127.0.0.1 through the tunnel; OpenVPN then cannot reach the local WSS bridge.
+        ipv4.excludedRoutes = [NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0")]
+        settings.ipv4Settings = ipv4
         settings.mtu = 1500
         return settings
     }
