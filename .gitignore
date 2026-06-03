@@ -89,6 +89,12 @@ build-engine/
 # Local installer output
 dist/
 
+# Notarization secrets (Keychain profile is preferred; never commit these)
+.notary.env
+.notary-credentials
+scripts/.notary-local*
+*.app-specific-password
+
 # Code Injection
 #
 # After new code Injection tools there's a generated folder /iOSInjectionProject

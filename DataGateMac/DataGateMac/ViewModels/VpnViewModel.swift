@@ -246,40 +246,7 @@ final class VpnViewModel: ObservableObject {
         Task { @MainActor in
             defer { connectInProgress = false; syncFromTunnel() }
             do {
-                appendLog("[Connect flow] Step 1: loadOrCreateConfiguration...")
-                try await tunnelManager.loadOrCreateConfiguration()
-                let config: TunnelConfig
-                if let auth = authState, let token = await auth.getValidAccessToken() {
-                    appendLog("[Connect flow] Step 2: build config from backend (TunnelConfigBuilder)...")
-                    let pick: TunnelServerPick = serverPickAutomatic
-                        ? .automatic
-                        : .manual(serverId: manualServerId)
-                    do {
-                        config = try await TunnelConfigBuilder.build(
-                            token: token,
-                            serverPick: pick,
-                            onLog: { [weak self] msg in self?.appendLog(msg) }
-                        )
-                        appendLog("[Connect flow] Step 2: using backend config \(config.host):\(config.port)")
-                    } catch let e as TunnelConfigBuildError {
-                        appendLog("[Connect flow] Step 2 FAIL: \(e.localizedDescription)")
-                        throw ConnectFlowError.tunnelBuild(e)
-                    } catch {
-                        appendLog("[Connect flow] Step 2 FAIL: \(error.localizedDescription)")
-                        throw ConnectFlowError.backendConfigUnavailable
-                    }
-                } else {
-                    appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
-                    throw ConnectFlowError.unauthorized
-                }
-                appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
-                activeTunnelSummary = "\(config.serverDisplayName) · \(config.host):\(config.port)"
-                try await tunnelManager.setConfiguration(config)
-                try await tunnelManager.reloadFromPreferences()
-                try tunnelManager.startTunnel()
-                appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
-                showVpnProfileResetSuggestion = false
-                showVpnProfileResetAlert = false
+                try await runConnectFlow(allowProfileRecreateRetry: true)
             } catch let flow as ConnectFlowError {
                 activeTunnelSummary = ""
                 appendLog("[Connect flow] FAIL: \(flow.errorDescription ?? "Unknown error")")
@@ -294,6 +261,75 @@ final class VpnViewModel: ObservableObject {
                 tunnelManager.stopTunnel()
             }
         }
+    }
+
+    /// Loads config, activates sysex, applies backend settings, starts tunnel; recreates VPN profile once on code 14.
+    private func runConnectFlow(allowProfileRecreateRetry: Bool) async throws {
+        appendLog("[Connect flow] Step 1: loadOrCreateConfiguration...")
+        try await tunnelManager.loadOrCreateConfiguration()
+        appendLog("[Connect flow] Step 1b: activate packet tunnel system extension...")
+        try await SystemExtensionInstaller.activateIfNeeded()
+        appendLog("[Connect flow] Step 1b: system extension activation OK.")
+        let config: TunnelConfig
+        if let auth = authState, let token = await auth.getValidAccessToken() {
+            appendLog("[Connect flow] Step 2: build config from backend (TunnelConfigBuilder)...")
+            let pick: TunnelServerPick = serverPickAutomatic
+                ? .automatic
+                : .manual(serverId: manualServerId)
+            do {
+                config = try await TunnelConfigBuilder.build(
+                    token: token,
+                    serverPick: pick,
+                    onLog: { [weak self] msg in self?.appendLog(msg) }
+                )
+                appendLog("[Connect flow] Step 2: using backend config \(config.host):\(config.port)")
+            } catch let e as TunnelConfigBuildError {
+                appendLog("[Connect flow] Step 2 FAIL: \(e.localizedDescription)")
+                throw ConnectFlowError.tunnelBuild(e)
+            } catch {
+                appendLog("[Connect flow] Step 2 FAIL: \(error.localizedDescription)")
+                throw ConnectFlowError.backendConfigUnavailable
+            }
+        } else {
+            appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
+            throw ConnectFlowError.unauthorized
+        }
+        try await startTunnelWithConfiguration(config, allowProfileRecreateRetry: allowProfileRecreateRetry)
+        showVpnProfileResetSuggestion = false
+        showVpnProfileResetAlert = false
+    }
+
+    private func startTunnelWithConfiguration(_ config: TunnelConfig, allowProfileRecreateRetry: Bool) async throws {
+        appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
+        activeTunnelSummary = "\(config.serverDisplayName) · \(config.host):\(config.port)"
+        try await tunnelManager.setConfiguration(config)
+        try await tunnelManager.reloadFromPreferences()
+        try tunnelManager.startTunnel()
+        appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
+
+        let outcome = await tunnelManager.waitForConnectOutcome(timeout: 3.0)
+        if outcome == .connected {
+            appendLog("[Connect flow] Step 3: tunnel connected.")
+            return
+        }
+        guard allowProfileRecreateRetry else { return }
+
+        let disconnectError = await tunnelManager.fetchLastDisconnectError()
+        let ns = disconnectError as NSError?
+        let shouldRetry = VpnProfileMigrationPolicy.shouldRetryConnectAfterCode14(
+            tunnelDisconnected: outcome == .disconnected,
+            disconnectDomain: ns?.domain,
+            disconnectCode: ns.map(\.code),
+            allowRetry: true
+        )
+        guard shouldRetry else { return }
+
+        appendLog("[Connect flow] Code 14 detected — recreating VPN profile and retrying Connect once...")
+        try await tunnelManager.recreateDataGateProfile(reason: "code 14 after startVPNTunnel")
+        try await tunnelManager.setConfiguration(config)
+        try await tunnelManager.reloadFromPreferences()
+        try tunnelManager.startTunnel()
+        appendLog("[Connect flow] Step 3 (retry): start requested after profile recreate.")
     }
 
     func updateServerPickAutomatic(_ value: Bool) {
@@ -322,8 +358,7 @@ final class VpnViewModel: ObservableObject {
         isBusy = true
         defer { isBusy = false; syncFromTunnel() }
         do {
-            try await tunnelManager.removeDataGateFromPreferences()
-            try await tunnelManager.loadOrCreateConfiguration()
+            try await tunnelManager.recreateDataGateProfile(reason: "user requested reset")
             appendLog("[Connect flow] Reset VPN profile: done. Try Connect again.")
             showVpnProfileResetSuggestion = false
             showVpnProfileResetAlert = false
