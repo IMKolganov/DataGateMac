@@ -31,7 +31,8 @@ if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1
 else
   echo "Notary profile '$NOTARY_PROFILE' not configured — skipping notarization."
   echo "Gatekeeper on other Macs will show 'unnotarized' until you run:"
-  echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <apple-id> --team-id RB28BRDVNP --password <app-specific-password>"
+  echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <apple-id> --team-id <team-id>"
+  echo "  (notarytool prompts for app-specific password interactively; do not commit it)"
   echo "  NOTARY_PROFILE=$NOTARY_PROFILE $0"
 fi
 

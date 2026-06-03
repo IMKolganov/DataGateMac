@@ -21,7 +21,8 @@ require_command codesign
 if [[ -z "$PROFILE" ]]; then
   echo "Usage: $0 <notarytool-keychain-profile> [dmg-path] [app-path]"
   echo "Example:"
-  echo "  xcrun notarytool store-credentials DataGateMacNotary --apple-id <apple-id> --team-id RB28BRDVNP --password <app-specific-password>"
+  echo "  xcrun notarytool store-credentials DataGateMacNotary --apple-id <apple-id> --team-id <team-id>"
+  echo "  (notarytool prompts for app-specific password interactively; do not commit it)"
   echo "  $0 DataGateMacNotary"
   exit 1
 fi

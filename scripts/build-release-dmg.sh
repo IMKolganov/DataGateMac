@@ -74,5 +74,6 @@ echo "Release app: $APP_PATH"
 echo "Release DMG: $DMG_PATH"
 echo
 echo "Next step (requires Apple ID app-specific password):"
-echo "  xcrun notarytool store-credentials DataGateMacNotary --apple-id <apple-id> --team-id RB28BRDVNP --password <app-specific-password>"
+echo "  xcrun notarytool store-credentials DataGateMacNotary --apple-id <apple-id> --team-id <team-id>"
+echo "  (notarytool prompts for app-specific password interactively; do not commit it)"
 echo "  $SCRIPT_DIR/notarize-dmg.sh DataGateMacNotary"
