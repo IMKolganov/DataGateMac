@@ -203,6 +203,12 @@ func shouldOfferVpnProfileResetAfterConfigurationError(_ error: Error) -> Bool {
     return lower.contains("permission denied")
 }
 
+/// True when macOS reported the packet tunnel plugin could not load (typical after appex → sysex migration).
+func isPacketTunnelUnavailableDisconnectError(_ error: Error?) -> Bool {
+    guard let ns = error as NSError? else { return false }
+    return VpnProfileMigrationPolicy.isPacketTunnelUnavailableDisconnect(domain: ns.domain, code: ns.code)
+}
+
 @MainActor
 final class VpnTunnelManager: ObservableObject {
     /// Current tunnel status (for UI).
@@ -299,51 +305,9 @@ final class VpnTunnelManager: ObservableObject {
         }
     }
 
-    /// Loads saved tunnel configuration or creates a new one.
-    func loadOrCreateConfiguration() async throws {
-        onLog?("[Tunnel] Step: loading preferences...")
-        let managers = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[NETunnelProviderManager], Error>) in
-            NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
-                if let error {
-                    cont.resume(throwing: error)
-                    return
-                }
-                cont.resume(returning: managers ?? [])
-            }
-        }
-
-        if let existing = managers.first(where: { $0.localizedDescription == "DataGate" }) {
-            if !existing.isEnabled {
-                onLog?("[Tunnel] Step: VPN manager was disabled; enabling and saving...")
-                existing.isEnabled = true
-                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                    existing.saveToPreferences { error in
-                        if let error {
-                            cont.resume(throwing: error)
-                        } else {
-                            cont.resume()
-                        }
-                    }
-                }
-            }
-            manager = existing
-            status = existing.connection.status
-            onLog?("[Tunnel] Step: using existing manager, status=\(status.rawValue)")
-            return
-        }
-
-        onLog?("[Tunnel] Step: creating new manager...")
-        let newManager = NETunnelProviderManager()
-        newManager.localizedDescription = "DataGate"
-        newManager.isEnabled = true
-        newManager.protocolConfiguration = {
-            let proto = NETunnelProviderProtocol()
-            proto.providerBundleIdentifier = TunnelConstants.packetTunnelBundleIdentifier
-            proto.serverAddress = "datagate"
-            return proto
-        }()
+    private func saveManagerToPreferences(_ manager: NETunnelProviderManager) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            newManager.saveToPreferences { error in
+            manager.saveToPreferences { error in
                 if let error {
                     cont.resume(throwing: error)
                 } else {
@@ -351,8 +315,129 @@ final class VpnTunnelManager: ObservableObject {
                 }
             }
         }
+    }
+
+    private func loadAllManagersFromPreferences() async throws -> [NETunnelProviderManager] {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[NETunnelProviderManager], Error>) in
+            NETunnelProviderManager.loadAllFromPreferences { managers, error in
+                if let error {
+                    cont.resume(throwing: error)
+                    return
+                }
+                cont.resume(returning: managers ?? [])
+            }
+        }
+    }
+
+    private static func makeNewDataGateManager() -> NETunnelProviderManager {
+        let newManager = NETunnelProviderManager()
+        newManager.localizedDescription = "DataGate"
+        newManager.isEnabled = true
+        let proto = NETunnelProviderProtocol()
+        proto.providerBundleIdentifier = TunnelConstants.packetTunnelBundleIdentifier
+        proto.serverAddress = "datagate"
+        newManager.protocolConfiguration = proto
+        return newManager
+    }
+
+    /// Removes and creates a fresh DataGate VPN profile (new session UUID — required after appex → sysex migration).
+    func recreateDataGateProfile(reason: String) async throws {
+        onLog?("[Tunnel] Step: recreating VPN profile (\(reason))...")
+        let managers = try await loadAllManagersFromPreferences()
+        if let match = managers.first(where: { $0.localizedDescription == "DataGate" }) {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                match.removeFromPreferences { error in
+                    if let error {
+                        cont.resume(throwing: error)
+                    } else {
+                        cont.resume()
+                    }
+                }
+            }
+            onLog?("[Tunnel] Step: removed stale DataGate profile from preferences.")
+        }
+        let newManager = Self.makeNewDataGateManager()
+        try await saveManagerToPreferences(newManager)
         manager = newManager
         status = .invalid
+        lastError = nil
+        UserDefaults.standard.set(Bundle.main.bundlePath, forKey: TunnelConstants.lastHostAppPathDefaultsKey)
+        onLog?("[Tunnel] Step: fresh DataGate profile saved.")
+    }
+
+    private func profileNeedsFullRecreate(existing: NETunnelProviderManager) -> String? {
+        let proto = existing.protocolConfiguration as? NETunnelProviderProtocol
+        return VpnProfileMigrationPolicy.recreateReason(for: VpnProfileMigrationPolicy.ProfileSnapshot(
+            savedProviderBundleIdentifier: proto?.providerBundleIdentifier,
+            lastRecordedHostAppPath: UserDefaults.standard.string(forKey: TunnelConstants.lastHostAppPathDefaultsKey),
+            currentHostAppPath: Bundle.main.bundlePath,
+            hostAppBundleIdentifier: Bundle.main.bundleIdentifier ?? "",
+            expectedProviderBundleIdentifier: TunnelConstants.packetTunnelBundleIdentifier,
+            hasExistingProfile: true
+        ))
+    }
+
+    /// Waits until the tunnel reaches a terminal status or timeout (used to detect immediate code 14).
+    func waitForConnectOutcome(timeout: TimeInterval = 3.0) async -> NEVPNStatus {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            applyStatusFromManagerConnection(reason: "connect wait")
+            let current = status
+            if current == .connected || current == .disconnected || current == .invalid {
+                return current
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        applyStatusFromManagerConnection(reason: "connect wait timeout")
+        return status
+    }
+
+    func fetchLastDisconnectError() async -> Error? {
+        guard let manager else { return nil }
+        return await withCheckedContinuation { cont in
+            manager.connection.fetchLastDisconnectError { error in
+                cont.resume(returning: error)
+            }
+        }
+    }
+
+    /// Loads saved tunnel configuration or creates a new one.
+    func loadOrCreateConfiguration() async throws {
+        onLog?("[Tunnel] Step: loading preferences...")
+        let managers = try await loadAllManagersFromPreferences()
+
+        if let existing = managers.first(where: { $0.localizedDescription == "DataGate" }) {
+            if let recreateReason = profileNeedsFullRecreate(existing: existing) {
+                try await recreateDataGateProfile(reason: recreateReason)
+                return
+            }
+            var needsSave = false
+            if !existing.isEnabled {
+                onLog?("[Tunnel] Step: VPN manager was disabled; enabling and saving...")
+                existing.isEnabled = true
+                needsSave = true
+            }
+            if let proto = existing.protocolConfiguration as? NETunnelProviderProtocol {
+                let saved = proto.providerBundleIdentifier ?? "(nil)"
+                onLog?("[Tunnel] Saved providerBundleIdentifier: \(saved)")
+            }
+            if needsSave {
+                try await saveManagerToPreferences(existing)
+                onLog?("[Tunnel] Step: VPN profile saved after normalization.")
+            }
+            manager = existing
+            status = existing.connection.status
+            UserDefaults.standard.set(Bundle.main.bundlePath, forKey: TunnelConstants.lastHostAppPathDefaultsKey)
+            onLog?("[Tunnel] Step: using existing manager, status=\(status.rawValue)")
+            return
+        }
+
+        onLog?("[Tunnel] Step: creating new manager...")
+        let newManager = Self.makeNewDataGateManager()
+        try await saveManagerToPreferences(newManager)
+        manager = newManager
+        status = .invalid
+        UserDefaults.standard.set(Bundle.main.bundlePath, forKey: TunnelConstants.lastHostAppPathDefaultsKey)
         onLog?("[Tunnel] Step: new manager saved.")
     }
 
@@ -364,23 +449,21 @@ final class VpnTunnelManager: ObservableObject {
             return try await setConfiguration(config)
         }
         guard let proto = manager.protocolConfiguration as? NETunnelProviderProtocol else { return }
+        let expectedBundleId = TunnelConstants.packetTunnelBundleIdentifier
+        let bundleIdStale = proto.providerBundleIdentifier != expectedBundleId
+        if bundleIdStale {
+            onLog?("[Tunnel] Step: fixing providerBundleIdentifier before save...")
+            proto.providerBundleIdentifier = expectedBundleId
+        }
         let nextConfig = config.toProviderConfiguration()
         let currentConfig = proto.providerConfiguration ?? [:]
-        if NSDictionary(dictionary: currentConfig).isEqual(to: nextConfig) {
+        if !bundleIdStale, NSDictionary(dictionary: currentConfig).isEqual(to: nextConfig) {
             onLog?("[Tunnel] Step: config unchanged; skip saveToPreferences().")
             return
         }
         proto.providerConfiguration = nextConfig
         manager.protocolConfiguration = proto
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            manager.saveToPreferences { error in
-                if let error {
-                    cont.resume(throwing: error)
-                } else {
-                    cont.resume()
-                }
-            }
-        }
+        try await saveManagerToPreferences(manager)
         onLog?("[Tunnel] Step: config saved.")
     }
 
@@ -403,15 +486,7 @@ final class VpnTunnelManager: ObservableObject {
     /// Deletes the saved "DataGate" VPN profile from System Settings. Use after copying the app to /Applications or if code 14 persists (stale profile tied to an old install path).
     func removeDataGateFromPreferences() async throws {
         onLog?("[Tunnel] Step: loading preferences to remove DataGate profile...")
-        let managers = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[NETunnelProviderManager], Error>) in
-            NETunnelProviderManager.loadAllFromPreferences { managers, error in
-                if let error {
-                    cont.resume(throwing: error)
-                    return
-                }
-                cont.resume(returning: managers ?? [])
-            }
-        }
+        let managers = try await loadAllManagersFromPreferences()
         guard let match = managers.first(where: { $0.localizedDescription == "DataGate" }) else {
             onLog?("[Tunnel] Step: no DataGate profile in preferences (nothing to remove).")
             manager = nil

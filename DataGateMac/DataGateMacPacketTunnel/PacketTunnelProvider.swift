@@ -31,8 +31,7 @@ private enum PacketTunnelStartupError: LocalizedError {
     }
 }
 
-/// Exposed to the ObjC runtime for `NSExtensionPrincipalClass` (PlugInKit / NE loads the class by name).
-@objc(PacketTunnelProvider)
+/// Loaded by NE via `NEProviderClasses` → `$(PRODUCT_MODULE_NAME).PacketTunnelProvider` in the sysex Info.plist.
 class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private let log = Logger(subsystem: "imkolganov.DataGateMac.PacketTunnel", category: "Tunnel")
@@ -40,6 +39,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private var packetFlowBridge: PacketFlowBridge?
     private var openVpnRunner: OpenVPNRunnerBridge?
     private var openVpnEngineWarningLogged = false
+
+    override init() {
+        super.init()
+        log.info("[Ext] PacketTunnelProvider init")
+    }
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         ExtensionLogWriter.beginNewSession()
@@ -60,11 +64,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         ExtensionLogWriter.append("[Ext] Step 1: startTunnel called, reading providerConfiguration")
         ExtensionLogWriter.append("[Ext] Extension bundle: \(Bundle.main.bundlePath)")
         ExtensionLogWriter.append("[Ext] Extension bundle id: \(Bundle.main.bundleIdentifier ?? "(nil)")")
-        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ExtensionLogWriter.appGroupId) {
-            ExtensionLogWriter.append("[Ext] App Group container OK: \(container.path)")
-        } else {
-            ExtensionLogWriter.append("[Ext] App Group container unavailable for \(ExtensionLogWriter.appGroupId)")
-        }
 
         guard let config = protocolConfiguration as? NETunnelProviderProtocol else {
             fail(PacketTunnelStartupError.missingProviderConfiguration)

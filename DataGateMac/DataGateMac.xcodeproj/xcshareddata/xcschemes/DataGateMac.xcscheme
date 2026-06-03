@@ -29,8 +29,22 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DA5124DA2F2F807100C61F86"
-               BuildableName = "DataGateMacPacketTunnel.appex"
+               BuildableName = "imkolganov.DataGateMac.PacketTunnel.systemextension"
                BlueprintName = "DataGateMacPacketTunnel"
+               ReferencedContainer = "container:DataGateMac.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DA5T00032F5000100C61F86"
+               BuildableName = "DataGateMacTests.xctest"
+               BlueprintName = "DataGateMacTests"
                ReferencedContainer = "container:DataGateMac.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -42,13 +56,19 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
-      <BuildableReference
-         BuildableIdentifier = "primary"
-         BlueprintIdentifier = "DA5124A82F2F807100C61F86"
-         BuildableName = "DataGateMac.app"
-         BlueprintName = "DataGateMac"
-         ReferencedContainer = "container:DataGateMac.xcodeproj">
-      </BuildableReference>
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DA5T00032F5000100C61F86"
+               BuildableName = "DataGateMacTests.xctest"
+               BlueprintName = "DataGateMacTests"
+               ReferencedContainer = "container:DataGateMac.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
