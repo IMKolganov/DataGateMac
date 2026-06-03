@@ -8,8 +8,8 @@ SCHEME="DataGateMac"
 DIST_DIR="$REPO_DIR/dist"
 ARCHIVE_PATH="$DIST_DIR/DataGateMac.xcarchive"
 EXPORT_DIR="$DIST_DIR/export"
-EXPORT_OPTIONS_PLIST="${EXPORT_OPTIONS_PLIST:-$SCRIPT_DIR/export-options-developer-id.plist}"
 APP_NAME="DataGateMac.app"
+ARCHIVE_APP="$ARCHIVE_PATH/Products/Applications/$APP_NAME"
 APP_PATH="$EXPORT_DIR/$APP_NAME"
 DMG_PATH="$DIST_DIR/DataGateMac.dmg"
 
@@ -24,43 +24,40 @@ require_command xcodebuild
 require_command codesign
 require_command security
 
-if [[ ! -f "$EXPORT_OPTIONS_PLIST" ]]; then
-  echo "Export options plist not found: $EXPORT_OPTIONS_PLIST"
-  exit 1
-fi
-
 if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
   echo "Developer ID Application certificate not found in keychain."
-  echo "Install a Developer ID Application certificate before building a public notarized release."
+  echo "Install a Developer ID Application certificate before building a public release."
   exit 1
 fi
 
 mkdir -p "$DIST_DIR"
 rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR" "$DMG_PATH"
 
-echo "Archiving Release build..."
+echo "Archiving Release build (dev entitlements in archive; Developer ID applied during re-sign)..."
 xcodebuild \
   -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
   -configuration Release \
-  -destination "platform=macOS" \
+  -destination "platform=macOS,arch=arm64" \
+  ARCHS=arm64 \
+  ONLY_ACTIVE_ARCH=YES \
   archive \
   -archivePath "$ARCHIVE_PATH"
 
-echo "Exporting Developer ID app..."
-xcodebuild \
-  -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist "$EXPORT_OPTIONS_PLIST"
-
-if [[ ! -d "$APP_PATH" ]]; then
-  echo "Exported app not found: $APP_PATH"
+if [[ ! -d "$ARCHIVE_APP" ]]; then
+  echo "Archived app not found: $ARCHIVE_APP"
   exit 1
 fi
 
-echo "Verifying app signature..."
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+mkdir -p "$EXPORT_DIR"
+echo "Copying app from archive..."
+ditto "$ARCHIVE_APP" "$APP_PATH"
+
+echo "Re-signing for Developer ID distribution..."
+bash "$SCRIPT_DIR/resign-developer-id-app.sh" "$APP_PATH"
+
+echo "Running release verification..."
+bash "$SCRIPT_DIR/verify-release-app.sh" "$APP_PATH"
 
 echo "Building DMG..."
 bash "$SCRIPT_DIR/build-dmg.sh" "$APP_PATH"
@@ -70,7 +67,12 @@ if [[ ! -f "$DMG_PATH" ]]; then
   exit 1
 fi
 
+bash "$SCRIPT_DIR/unregister-duplicate-apps.sh" "/Applications/DataGateMac.app"
+
 echo
 echo "Release app: $APP_PATH"
 echo "Release DMG: $DMG_PATH"
-echo "Next step: notarize the DMG with scripts/notarize-dmg.sh"
+echo
+echo "Next step (requires Apple ID app-specific password):"
+echo "  xcrun notarytool store-credentials DataGateMacNotary --apple-id <apple-id> --team-id RB28BRDVNP --password <app-specific-password>"
+echo "  $SCRIPT_DIR/notarize-dmg.sh DataGateMacNotary"

@@ -7,6 +7,7 @@ DIST_DIR="$REPO_DIR/dist"
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/datagate-dmg-stage.XXXXXX")"
 VOL_NAME="DataGateMac"
 APP_NAME="DataGateMac.app"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 DMG_PATH="$DIST_DIR/${VOL_NAME}.dmg"
 TEMP_RW_DMG="$DIST_DIR/${VOL_NAME}-temp.dmg"
 WINDOW_BOUNDS="{120, 120, 760, 480}"
@@ -86,6 +87,9 @@ end tell
 EOF
 
 sync
+if [[ -x "$LSREGISTER" && -d "$VOLUME_PATH/$APP_NAME" ]]; then
+  "$LSREGISTER" -u "$VOLUME_PATH/$APP_NAME" 2>/dev/null || true
+fi
 hdiutil detach "$DEVICE" >/dev/null
 
 hdiutil convert "$TEMP_RW_DMG" \
