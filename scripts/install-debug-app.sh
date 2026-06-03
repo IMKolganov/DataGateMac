@@ -11,7 +11,8 @@ if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${FULL_PRODUCT_NAME:-}" ]]; then
 fi
 
 SRC_APP="${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}"
-DEST_DIR="${HOME}/Applications"
+# System extension activation requires the host app in /Applications (not ~/Applications).
+DEST_DIR="/Applications"
 DEST_APP="${DEST_DIR}/${FULL_PRODUCT_NAME}"
 LOG_FILE="${TMPDIR:-/tmp}/datagate-debug-install.log"
 

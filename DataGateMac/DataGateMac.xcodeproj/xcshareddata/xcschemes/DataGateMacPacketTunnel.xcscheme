@@ -17,7 +17,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DA5124DA2F2F807100C61F86"
-               BuildableName = "DataGateMacPacketTunnel.appex"
+               BuildableName = "imkolganov.DataGateMac.PacketTunnel.systemextension"
                BlueprintName = "DataGateMacPacketTunnel"
                ReferencedContainer = "container:DataGateMac.xcodeproj">
             </BuildableReference>
