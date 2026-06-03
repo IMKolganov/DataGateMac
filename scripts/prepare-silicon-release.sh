@@ -15,7 +15,6 @@ echo "=== DataGateMac Apple Silicon release pipeline ==="
 
 bash "$SCRIPT_DIR/build-release-dmg.sh"
 
-DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
 APP_SHA256="$(shasum -a 256 "$APP_PATH/Contents/MacOS/DataGateMac" | awk '{print $1}')"
 SYSEX="$(find "$APP_PATH/Contents/Library/SystemExtensions" -maxdepth 1 -name '*.systemextension' -print -quit)"
 SYSEX_SHA256="$(shasum -a 256 "$SYSEX/Contents/MacOS/"* | awk '{print $1}')"
@@ -36,6 +35,7 @@ else
   echo "  NOTARY_PROFILE=$NOTARY_PROFILE $0"
 fi
 
+DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
 printf '%s  DataGateMac.dmg\n' "$DMG_SHA256" > "$SHA256_FILE"
 
 {

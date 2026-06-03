@@ -54,6 +54,24 @@ if /usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups' "$S
 fi
 
 echo
+echo "=== host sysex-install vs Developer ID profile ==="
+HOST_PROFILE_TMP="$(mktemp)"
+security cms -D -i "$APP/Contents/embedded.provisionprofile" > "$HOST_PROFILE_TMP"
+HOST_HAS_SYSEX_INSTALL_ENT="$(
+  /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.system-extension.install' "$HOST_ENT_TMP" >/dev/null 2>&1 && echo yes || echo no
+)"
+HOST_PROFILE_HAS_SYSEX_INSTALL="$(
+  /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.system-extension.install' "$HOST_PROFILE_TMP" >/dev/null 2>&1 && echo yes || echo no
+)"
+if [[ "$HOST_HAS_SYSEX_INSTALL_ENT" == yes && "$HOST_PROFILE_HAS_SYSEX_INSTALL" == no ]]; then
+  fail "host claims com.apple.developer.system-extension.install but embedded Developer ID profile does not authorize it (macOS launch error 163). Regenerate the host Developer ID profile on developer.apple.com with System Extension enabled, or omit sysex-install from release entitlements."
+fi
+if [[ "$HOST_HAS_SYSEX_INSTALL_ENT" == no && "$HOST_PROFILE_HAS_SYSEX_INSTALL" == yes ]]; then
+  fail "Developer ID profile authorizes sysex-install but host signature omits it; OSSystemExtensionRequest will fail at runtime"
+fi
+rm -f "$HOST_PROFILE_TMP"
+
+echo
 echo "=== embedded provisioning profiles ==="
 [[ -f "$APP/Contents/embedded.provisionprofile" ]] || fail "host missing embedded.provisionprofile"
 [[ -f "$SYSEX/Contents/embedded.provisionprofile" ]] || fail "sysex missing embedded.provisionprofile"
