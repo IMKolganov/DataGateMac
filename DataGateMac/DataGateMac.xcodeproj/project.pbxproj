@@ -16,12 +16,15 @@
 		DA5124E62F2F807100C61F86 /* PacketFlowBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124E72F2F807100C61F86 /* PacketFlowBridge.swift */; };
 		DA5124F12F2F807100C61F86 /* ExtensionLogWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124F02F2F807100C61F86 /* ExtensionLogWriter.swift */; };
 		DA7F10012FD3022200A1B2C3 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */; };
+		DAX10011FD3000100A1B2C3 /* XrayRunnerBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = DAX10002FD3000100A1B2C3 /* XrayRunnerBridge.m */; };
+		DAX10012FD3000100A1B2C3 /* XrayConfigAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAX10003FD3000100A1B2C3 /* XrayConfigAssembler.swift */; };
 		DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */; };
 		DAB100022FD3000100A1B2C3 /* libovpn3-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB100062FD3000100A1B2C3 /* libovpn3-core.a */; };
 		DAB100092FD3000100A1B2C3 /* libjsoncpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB100072FD3000100A1B2C3 /* libjsoncpp.a */; };
 		DAB200022FD4000100A1B2C3 /* SystemExtensionMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB200012FD4000100A1B2C3 /* SystemExtensionMain.swift */; };
 		DAB200042FD4000100A1B2C3 /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB200032FD4000100A1B2C3 /* SystemExtensions.framework */; };
 		DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */; };
+		DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00112F6100100C61F86 /* AuthProfileTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,12 +72,16 @@
 		DA7F10002FD3022200A1B2C3 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		DAB100032FD3000100A1B2C3 /* OpenVPNRunnerBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OpenVPNRunnerBridge.h; sourceTree = "<group>"; };
 		DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OpenVPNRunnerBridge.mm; sourceTree = "<group>"; };
+		DAX10001FD3000100A1B2C3 /* XrayRunnerBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = XrayRunnerBridge.h; sourceTree = "<group>"; };
+		DAX10002FD3000100A1B2C3 /* XrayRunnerBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = XrayRunnerBridge.m; sourceTree = "<group>"; };
+		DAX10003FD3000100A1B2C3 /* XrayConfigAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XrayConfigAssembler.swift; sourceTree = "<group>"; };
 		DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "DataGateMacPacketTunnel-Bridging-Header.h"; sourceTree = "<group>"; };
 		DAB100062FD3000100A1B2C3 /* libovpn3-core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libovpn3-core.a"; path = "../build-engine/libovpn3-core.a"; sourceTree = SOURCE_ROOT; };
 		DAB100072FD3000100A1B2C3 /* libjsoncpp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libjsoncpp.a; path = "../build-engine/libjsoncpp.a"; sourceTree = SOURCE_ROOT; };
 		DAB200012FD4000100A1B2C3 /* SystemExtensionMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemExtensionMain.swift; sourceTree = "<group>"; };
 		DAB200032FD4000100A1B2C3 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
 		DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnProfileMigrationPolicyTests.swift; sourceTree = "<group>"; };
+		DA5T00112F6100100C61F86 /* AuthProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthProfileTests.swift; sourceTree = "<group>"; };
 		DA5T00062F5000100C61F86 /* DataGateMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DataGateMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -133,6 +140,7 @@
 			isa = PBXGroup;
 			children = (
 				DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */,
+				DA5T00112F6100100C61F86 /* AuthProfileTests.swift */,
 			);
 			path = DataGateMacTests;
 			sourceTree = "<group>";
@@ -157,6 +165,9 @@
 				DA5124F02F2F807100C61F86 /* ExtensionLogWriter.swift */,
 				DAB100032FD3000100A1B2C3 /* OpenVPNRunnerBridge.h */,
 				DAB100042FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm */,
+				DAX10001FD3000100A1B2C3 /* XrayRunnerBridge.h */,
+				DAX10002FD3000100A1B2C3 /* XrayRunnerBridge.m */,
+				DAX10003FD3000100A1B2C3 /* XrayConfigAssembler.swift */,
 				DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */,
 				DA5124D32F2F807100C61F86 /* Info.plist */,
 				DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */,
@@ -379,6 +390,8 @@
 				DA5124E62F2F807100C61F86 /* PacketFlowBridge.swift in Sources */,
 				DA5124F12F2F807100C61F86 /* ExtensionLogWriter.swift in Sources */,
 				DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */,
+				DAX10011FD3000100A1B2C3 /* XrayRunnerBridge.m in Sources */,
+				DAX10012FD3000100A1B2C3 /* XrayConfigAssembler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,6 +400,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */,
+				DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -534,7 +548,7 @@
 				CODE_SIGN_ENTITLEMENTS = DataGateMac/DataGateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -568,7 +582,7 @@
 				CODE_SIGN_ENTITLEMENTS = DataGateMac/DataGateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -599,7 +613,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_DEBUG_DYLIB = NO;
@@ -619,6 +633,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/../openvpn3",
 					"$(PROJECT_DIR)/../openvpn3/client",
+					"$(PROJECT_DIR)/../build-libxray",
 					"$(HOMEBREW_PREFIX)/include",
 					"$(HOMEBREW_PREFIX)/opt/openssl/include",
 				);
@@ -632,6 +647,7 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../build-engine",
+					"$(PROJECT_DIR)/../build-libxray",
 				);
 				MARKETING_VERSION = 1.0.2;
 				OTHER_CPLUSPLUSFLAGS = (
@@ -649,6 +665,9 @@
 					"$(HOMEBREW_PREFIX)/opt/lz4/lib/liblz4.a",
 					"$(HOMEBREW_PREFIX)/opt/xxhash/lib/libxxhash.a",
 					"-lz",
+					"-lresolv",
+					"-force_load",
+					"$(PROJECT_DIR)/../build-libxray/libXray.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_MODULE_NAME = DataGateMacPacketTunnel;
@@ -666,7 +685,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_DEBUG_DYLIB = NO;
@@ -686,6 +705,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/../openvpn3",
 					"$(PROJECT_DIR)/../openvpn3/client",
+					"$(PROJECT_DIR)/../build-libxray",
 					"$(HOMEBREW_PREFIX)/include",
 					"$(HOMEBREW_PREFIX)/opt/openssl/include",
 				);
@@ -699,6 +719,7 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../build-engine",
+					"$(PROJECT_DIR)/../build-libxray",
 				);
 				MARKETING_VERSION = 1.0.2;
 				OTHER_CPLUSPLUSFLAGS = (
@@ -716,6 +737,9 @@
 					"$(HOMEBREW_PREFIX)/opt/lz4/lib/liblz4.a",
 					"$(HOMEBREW_PREFIX)/opt/xxhash/lib/libxxhash.a",
 					"-lz",
+					"-lresolv",
+					"-force_load",
+					"$(PROJECT_DIR)/../build-libxray/libXray.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac.PacketTunnel;
 				PRODUCT_MODULE_NAME = DataGateMacPacketTunnel;
@@ -733,7 +757,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
@@ -751,7 +775,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;

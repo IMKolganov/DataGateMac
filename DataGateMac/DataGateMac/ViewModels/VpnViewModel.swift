@@ -46,7 +46,7 @@ final class VpnViewModel: ObservableObject {
     @Published var showVpnProfileResetSuggestion = false
     /// One-shot alert after a configuration error; dismissing it keeps `showVpnProfileResetSuggestion` true.
     @Published var showVpnProfileResetAlert = false
-    /// WSS servers for Home picker (refreshed from the same API as connect).
+    /// Servers for Home picker (refreshed from the same API as connect).
     @Published var vpnServerRows: [HomeVpnServerRow] = []
     @Published var isRefreshingServerList = false
     @Published var serverListBanner: String = ""
@@ -196,11 +196,11 @@ final class VpnViewModel: ObservableObject {
         serverListBanner = ""
         defer { isRefreshingServerList = false }
         do {
-            let servers = try await OpenVpnServersApiClient.shared.getAllWithStatus(token: token)
+            let servers = try await OpenVpnServersApiClient.shared.getAllWithStatus(token: token, withoutCache: true)
             vpnServerRows = TunnelConfigBuilder.homeRows(from: servers)
             normalizeManualServerSelection()
             if vpnServerRows.isEmpty {
-                serverListBanner = L10n.tr("home_server_list_empty", "No WSS-enabled servers returned for your account.")
+                serverListBanner = L10n.tr("home_server_list_empty", "No servers returned for your account.")
             }
         } catch {
             serverListBanner = error.localizedDescription
@@ -301,7 +301,17 @@ final class VpnViewModel: ObservableObject {
 
     private func startTunnelWithConfiguration(_ config: TunnelConfig, allowProfileRecreateRetry: Bool) async throws {
         appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
-        activeTunnelSummary = "\(config.serverDisplayName) · \(config.host):\(config.port)"
+        let transport: String
+        switch config.transportMode {
+        case .direct:
+            transport = L10n.tr("home_server_openvpn_label", "OpenVPN")
+        case .xray:
+            transport = L10n.tr("home_server_xray_label", "Xray")
+        case .wss:
+            transport = "WSS"
+        }
+        let proto = config.linkProtocol.rawValue.uppercased()
+        activeTunnelSummary = "\(config.serverDisplayName) · \(transport) · \(proto) · \(config.host):\(config.port)"
         try await tunnelManager.setConfiguration(config)
         try await tunnelManager.reloadFromPreferences()
         try tunnelManager.startTunnel()

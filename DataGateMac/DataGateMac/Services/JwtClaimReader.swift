@@ -42,4 +42,32 @@ enum JwtClaimReader {
         if let s = json["sub"] as? String, let n = Int(s) { return n }
         return nil
     }
+
+    /// HTTPS avatar URL from backend JWT (`avatarUrl`) or Google-style `picture`.
+    static func getAvatarUrl(fromJwt jwt: String) -> String? {
+        guard let json = jwtPayload(from: jwt) else { return nil }
+        let raw = (json["avatarUrl"] as? String)
+            ?? (json["AvatarUrl"] as? String)
+            ?? (json["picture"] as? String)
+        return ProfileImageURL.normalizedString(raw)
+    }
+}
+
+/// Google / backend profile photos must be HTTPS (same rule as the backend normalizer).
+enum ProfileImageURL {
+    static func normalizedString(_ raw: String?) -> String? {
+        guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        if value.count > 2048 {
+            value = String(value.prefix(2048))
+        }
+        guard value.lowercased().hasPrefix("https://") else { return nil }
+        return value
+    }
+
+    static func parse(_ raw: String?) -> URL? {
+        guard let value = normalizedString(raw) else { return nil }
+        return URL(string: value)
+    }
 }

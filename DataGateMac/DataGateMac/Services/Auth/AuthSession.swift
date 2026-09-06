@@ -42,6 +42,7 @@ final class AuthSession {
     }
 
     func setFromLogin(_ response: GoogleLoginResponse) throws {
+        guard response.hasAccessToken else { return }
         let tokens = response.asAuthTokens
         try store.save(tokens)
         setCurrent(tokens)

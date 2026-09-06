@@ -55,28 +55,36 @@ struct MainView: View {
                 .listStyle(.sidebar)
 
                 if authState.isAuthorized {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let name = authState.displayName, !name.isEmpty {
-                            Text(name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                    HStack(alignment: .center, spacing: 10) {
+                        UserAvatarView(
+                            imageURL: ProfileImageURL.parse(authState.avatarUrl),
+                            displayName: authState.displayName,
+                            email: authState.email
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let name = authState.displayName, !name.isEmpty {
+                                Text(name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            if let mail = authState.email, !mail.isEmpty {
+                                Text(mail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            if authState.displayName == nil && authState.email == nil {
+                                Text(L10n.tr("main_logged_in", "Logged in"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        if let mail = authState.email, !mail.isEmpty {
-                            Text(mail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        if authState.displayName == nil && authState.email == nil {
-                            Text(L10n.tr("main_logged_in", "Logged in"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(Color.primary.opacity(0.06))

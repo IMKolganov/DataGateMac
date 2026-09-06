@@ -45,7 +45,7 @@ Implementation guide: [NETWORK_EXTENSION.md](NETWORK_EXTENSION.md).
 ```bash
 git clone <repo-url>
 cd DataGateMac
-git submodule update --init --recursive   # fetch openvpn3
+git submodule update --init --recursive   # fetch openvpn3 and libXray
 ```
 
 ### 2. API and auth config
@@ -64,12 +64,20 @@ If the app uses a backend, copy the example config and set your values (e.g. `Co
 |------|-------------|
 | **DataGateMac/** | Main app (Swift, SwiftUI) and Packet Tunnel extension. |
 | **openvpn3/** | OpenVPN 3 source (git submodule). |
+| **libXray/** | Xray-core wrapper (git submodule, `XTLS/libXray`). Build with `scripts/bootstrap-go.sh` then `scripts/build-libxray.sh` → `build-libxray/libXray.a`. |
 | **engine/** | CMake build for macOS: produces `libovpn3-core.a` (same approach as DataGateWin/engine). |
 | **assets/** | Logo and images for the repo (e.g. README). |
 
 ## Building OpenVPN 3 core for macOS
 
 We build the same **OpenVPN 3 core** as DataGateWin (static library from the `openvpn3` submodule) using **engine/** so the same VPN + WSS logic can run on Mac (in the Packet Tunnel extension or a separate engine process). See [engine/README.md](engine/README.md) for architecture and next steps.
+
+**Xray (libXray):** the packet tunnel also links a macOS c-archive of [libXray](https://github.com/XTLS/libXray). From the repo root:
+
+```bash
+scripts/bootstrap-go.sh          # Go 1.26.3 into .tools/go (not system Go)
+scripts/build-libxray.sh         # → build-libxray/libXray.a
+```
 
 **Dependencies (Homebrew):**
 

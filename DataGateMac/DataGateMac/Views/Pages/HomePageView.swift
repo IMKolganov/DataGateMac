@@ -178,6 +178,16 @@ struct HomePageView: View {
     private func homeServerRowLabel(_ row: HomeVpnServerRow) -> String {
         let load = L10n.trFormat("home_server_clients_fmt", "%d clients", row.clientCount)
         var base = "\(row.displayName) · \(load)"
+        if row.isXray {
+            base += L10n.tr("home_server_xray_suffix", " · Xray")
+        } else if row.usesWss {
+            base += L10n.tr("home_server_wss_suffix", " · WSS")
+        } else {
+            base += L10n.tr("home_server_openvpn_suffix", " · OpenVPN")
+        }
+        if let proto = row.protocolLabel {
+            base += " · \(proto)"
+        }
         if !row.isOnline {
             base += L10n.tr("home_server_offline_suffix", " (offline)")
         }

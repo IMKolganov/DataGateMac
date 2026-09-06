@@ -112,7 +112,7 @@ enum VpnDiagnostics {
                 if lastActivatedVersion == embeddedVersion {
                     lines.append("[Diagnostics] Last activated sysex build: \(lastActivatedVersion) (matches embedded)")
                 } else {
-                    lines.append("[Diagnostics] WARNING: Last activated sysex build \(lastActivatedVersion) != embedded \(embeddedVersion). Connect will deactivate/replace — approve in System Settings if prompted.")
+                    lines.append("[Diagnostics] WARNING: Last activated sysex build \(lastActivatedVersion) != embedded \(embeddedVersion). Connect will replace the extension — approve in System Settings if prompted.")
                 }
             } else {
                 lines.append("[Diagnostics] Last activated sysex build: (none recorded yet)")

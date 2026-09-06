@@ -249,10 +249,28 @@ struct AccessPageView: View {
         }
     }
 
+    private func accessServerLabel(_ row: OpenVpnServerWithStatusDto) -> String {
+        let server = row.openVpnServerResponses.openVpnServer
+        var name = server.serverName
+        if server.serverType == .xray {
+            name += " · Xray"
+            return name
+        }
+        if server.isEnableWss == true {
+            name += L10n.tr("home_server_wss_suffix", " · WSS")
+        } else {
+            name += L10n.tr("home_server_openvpn_suffix", " · OpenVPN")
+        }
+        if let proto = server.listedLinkProtocol {
+            name += " · \(proto)"
+        }
+        return name
+    }
+
     private var serverTable: some View {
         Table(servers, columns: {
             TableColumn(L10n.tr("tbl_server", "Server")) { row in
-                Text(row.openVpnServerResponses.openVpnServer.serverName)
+                Text(accessServerLabel(row))
             }
             TableColumn(L10n.tr("tbl_clients", "Clients")) { row in
                 Text("\(row.countConnectedClients)")
@@ -294,7 +312,7 @@ struct AccessPageView: View {
         async let quotaTask: QuotaSectionState = loadQuotaState(token: token, userId: uid)
 
         do {
-            servers = try await serversApi.getAllWithStatus(token: token)
+            servers = try await serversApi.getAllWithStatus(token: token, withoutCache: true)
             serverListError = nil
         } catch {
             serverListError = error.localizedDescription

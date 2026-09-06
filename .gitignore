@@ -86,6 +86,10 @@ DataGateMac_NE_log.txt
 # Local CMake build output for ovpn3 engine
 build-engine/
 
+# Local libXray c-archive and a repo-local Go toolchain
+build-libxray/
+.tools/
+
 # Local installer output
 dist/
 
