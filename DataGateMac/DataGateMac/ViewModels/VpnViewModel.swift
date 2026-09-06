@@ -66,6 +66,8 @@ final class VpnViewModel: ObservableObject {
     @Published var manualServerId: Int = 0
     /// Local profile currently applied to the DataGate tunnel (cleared on backend Connect / disconnect).
     @Published var connectedManualProfileId: UUID?
+    /// Last connect failure for a local profile, shown on the Profiles list.
+    @Published var lastManualConnectErrorById: [UUID: String] = [:]
 
     private let tunnelManager = VpnTunnelManager()
     private let manualProfileStore: ManualVpnProfileStore
@@ -308,13 +310,19 @@ final class VpnViewModel: ObservableObject {
             defer { connectInProgress = false; syncFromTunnel() }
             do {
                 try await runManualConnectFlow(profileId: id, allowProfileRecreateRetry: true)
+                var errors = lastManualConnectErrorById
+                errors.removeValue(forKey: id)
+                lastManualConnectErrorById = errors
             } catch let flow as ConnectFlowError {
+                recordManualConnectError(id: id, message: flow.errorDescription ?? "Unknown error")
                 clearTunnelSession()
                 appendLog("[Connect flow] FAIL: \(flow.errorDescription ?? "Unknown error")")
                 tunnelManager.stopTunnel()
             } catch {
+                let message = tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_updating_config", "updating VPN configuration"))
+                recordManualConnectError(id: id, message: message)
                 clearTunnelSession()
-                appendLog("[Connect flow] FAIL at step: \(tunnelConfigurationErrorLocalizedDescription(error, action: L10n.tr("vpn_action_updating_config", "updating VPN configuration")))")
+                appendLog("[Connect flow] FAIL at step: \(message)")
                 if shouldOfferVpnProfileResetAfterConfigurationError(error) {
                     showVpnProfileResetSuggestion = true
                     showVpnProfileResetAlert = true
@@ -330,6 +338,23 @@ final class VpnViewModel: ObservableObject {
 
     func isManualProfileConnected(_ id: UUID) -> Bool {
         connectedManualProfileId == id && (tunnelManager.isConnectingOrConnected || tunnelManager.status == .disconnecting)
+    }
+
+    func noteRenamedManualProfile(id: UUID, displayName: String) {
+        guard connectedManualProfileId == id, var config = tunnelManager.currentTunnelConfig() else { return }
+        config.serverDisplayName = displayName
+        applyTunnelSession(from: config)
+    }
+
+    var recentConnectLogExcerpt: String {
+        let lines = logText.split(separator: "\n", omittingEmptySubsequences: false)
+        return lines.suffix(8).joined(separator: "\n")
+    }
+
+    private func recordManualConnectError(id: UUID, message: String) {
+        var errors = lastManualConnectErrorById
+        errors[id] = message
+        lastManualConnectErrorById = errors
     }
 
     /// Loads config, activates sysex, applies backend settings, starts tunnel; recreates VPN profile once on code 14.
@@ -524,8 +549,11 @@ final class VpnViewModel: ObservableObject {
             transport = "WSS"
         }
         let proto = config.linkProtocol.rawValue.uppercased()
+        let localPrefix = config.manualProfileId == nil
+            ? ""
+            : L10n.tr("profiles_local_prefix", "Local") + " · "
         persistTunnelSession(
-            summary: "\(config.serverDisplayName) · \(transport) · \(proto) · \(config.host):\(config.port)",
+            summary: "\(localPrefix)\(config.serverDisplayName) · \(transport) · \(proto) · \(config.host):\(config.port)",
             manualProfileId: config.manualProfileId
         )
     }

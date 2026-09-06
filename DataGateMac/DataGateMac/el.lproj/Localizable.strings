@@ -43,6 +43,7 @@
 "home_alert_reset_title" = "Reset VPN profile?";
 "home_conn_status" = "Connection status";
 "home_connect" = "Connect";
+"home_connected_local_profile" = "Connected with a local profile from Profiles. Connect here switches to a DataGate server.";
 "home_copy_log" = "Copy command to capture system log";
 "home_disconnect" = "Disconnect";
 "home_engine_logs" = "Engine logs";
@@ -130,11 +131,15 @@
 "profiles_delete" = "Delete";
 "profiles_delete_confirm_fmt" = "“%@” will be removed from this Mac. The VPN disconnects if this profile is active.";
 "profiles_delete_title" = "Delete this profile?";
+"profiles_edit" = "Edit";
+"profiles_edit_title" = "Edit local profile";
 "profiles_empty" = "No local profiles yet.";
 "profiles_empty_hint" = "Paste a vless:// link, JSON with vless / vlessXhttp, or an OpenVPN client profile. You can also drop a file here.";
+"profiles_err_duplicate" = "This profile is already saved.";
 "profiles_err_empty" = "Paste an OpenVPN profile or a VLESS link first.";
 "profiles_err_empty_name" = "Enter a profile name.";
 "profiles_err_missing" = "That local profile is no longer on disk.";
+"profiles_err_missing_payload" = "The saved file for this profile is missing. Edit or delete it.";
 "profiles_err_ovpn_no_remote" = "This OpenVPN profile has no usable remote host.";
 "profiles_err_ovpn_password" = "This OpenVPN profile asks for a username and password. Embedded credentials are required; interactive login is not supported yet.";
 "profiles_err_too_large" = "This profile is too large to import (maximum 512 KB).";
@@ -143,6 +148,7 @@
 "profiles_import_file" = "Import file…";
 "profiles_kind_openvpn" = "OpenVPN";
 "profiles_kind_xray" = "Xray";
+"profiles_local_prefix" = "Local";
 "profiles_name_placeholder" = "Profile name";
 "profiles_paste" = "Paste";
 "profiles_paste_placeholder" = "vless://… or client / remote / <ca> …";

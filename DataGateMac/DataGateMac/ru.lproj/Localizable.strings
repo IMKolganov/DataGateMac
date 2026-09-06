@@ -43,6 +43,7 @@
 "home_alert_reset_title" = "Сбросить VPN-профиль?";
 "home_conn_status" = "Состояние подключения";
 "home_connect" = "Подключить";
+"home_connected_local_profile" = "Подключение через локальный профиль из раздела «Профили». Connect здесь переключит на сервер DataGate.";
 "home_copy_log" = "Команда для снятия системного лога";
 "home_disconnect" = "Отключить";
 "home_engine_logs" = "Логи движка";
@@ -130,11 +131,15 @@
 "profiles_delete" = "Удалить";
 "profiles_delete_confirm_fmt" = "«%@» будет удалён с этого Mac. VPN отключится, если профиль активен.";
 "profiles_delete_title" = "Удалить этот профиль?";
+"profiles_edit" = "Изменить";
+"profiles_edit_title" = "Изменить локальный профиль";
 "profiles_empty" = "Локальных профилей пока нет.";
 "profiles_empty_hint" = "Вставьте ссылку vless://, JSON с vless / vlessXhttp или клиентский профиль OpenVPN. Можно также перетащить файл сюда.";
+"profiles_err_duplicate" = "Этот профиль уже сохранён.";
 "profiles_err_empty" = "Сначала вставьте профиль OpenVPN или ссылку VLESS.";
 "profiles_err_empty_name" = "Введите имя профиля.";
 "profiles_err_missing" = "Этот локальный профиль больше не найден на диске.";
+"profiles_err_missing_payload" = "Файл этого профиля не найден. Измените или удалите его.";
 "profiles_err_ovpn_no_remote" = "В этом профиле OpenVPN нет подходящего remote-хоста.";
 "profiles_err_ovpn_password" = "Этот профиль OpenVPN запрашивает логин и пароль. Нужны встроенные учётные данные; интерактивный вход пока не поддерживается.";
 "profiles_err_too_large" = "Этот профиль слишком большой для импорта (максимум 512 КБ).";
@@ -143,6 +148,7 @@
 "profiles_import_file" = "Импорт файла…";
 "profiles_kind_openvpn" = "OpenVPN";
 "profiles_kind_xray" = "Xray";
+"profiles_local_prefix" = "Локальный";
 "profiles_name_placeholder" = "Имя профиля";
 "profiles_paste" = "Вставить";
 "profiles_paste_placeholder" = "vless://… или client / remote / <ca> …";

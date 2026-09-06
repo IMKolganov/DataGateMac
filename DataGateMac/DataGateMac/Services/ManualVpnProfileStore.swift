@@ -7,9 +7,10 @@
 
 import Foundation
 
-enum ManualVpnProfileStoreError: LocalizedError {
+enum ManualVpnProfileStoreError: LocalizedError, Equatable {
     case profileMissing
     case emptyName
+    case duplicate
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,8 @@ enum ManualVpnProfileStoreError: LocalizedError {
             return L10n.tr("profiles_err_missing", "That local profile is no longer on disk.")
         case .emptyName:
             return L10n.tr("profiles_err_empty_name", "Enter a profile name.")
+        case .duplicate:
+            return L10n.tr("profiles_err_duplicate", "This profile is already saved.")
         }
     }
 }
@@ -76,6 +79,9 @@ final class ManualVpnProfileStore {
     @discardableResult
     func add(_ draft: ManualVpnProfileDraft) throws -> ManualVpnProfile {
         try ensureDirectories()
+        if try existingId(matchingPayload: draft.payload) != nil {
+            throw ManualVpnProfileStoreError.duplicate
+        }
         let now = Date()
         let id = UUID()
         let record = IndexRecord(
@@ -117,6 +123,63 @@ final class ManualVpnProfileStore {
         index.profiles[idx].displayName = name
         index.profiles[idx].updatedAt = Date()
         try saveIndex(index)
+    }
+
+    @discardableResult
+    func replace(id: UUID, draft: ManualVpnProfileDraft) throws -> ManualVpnProfile {
+        try ensureDirectories()
+        if try existingId(matchingPayload: draft.payload, excluding: id) != nil {
+            throw ManualVpnProfileStoreError.duplicate
+        }
+        var index = try loadIndex()
+        guard let idx = index.profiles.firstIndex(where: { $0.id == id }) else {
+            throw ManualVpnProfileStoreError.profileMissing
+        }
+        let old = index.profiles[idx]
+        var updated = old
+        updated.displayName = try sanitizedName(draft.displayName)
+        updated.kind = draft.kind
+        updated.updatedAt = Date()
+        try writePayload(draft.payload, for: updated)
+        index.profiles[idx] = updated
+        do {
+            try saveIndex(index)
+        } catch {
+            if old.kind != updated.kind {
+                try? fileManager.removeItem(at: payloadURL(for: updated))
+            }
+            throw error
+        }
+        if old.kind != updated.kind {
+            let stale = payloadURL(for: old)
+            if fileManager.fileExists(atPath: stale.path) {
+                try? fileManager.removeItem(at: stale)
+            }
+        }
+        return ManualVpnProfile(
+            id: updated.id,
+            displayName: updated.displayName,
+            kind: updated.kind,
+            payload: draft.payload,
+            createdAt: updated.createdAt,
+            updatedAt: updated.updatedAt
+        )
+    }
+
+    func existingId(matchingPayload payload: String, excluding id: UUID? = nil) throws -> UUID? {
+        let needle = Self.normalizedPayload(payload)
+        guard !needle.isEmpty else { return nil }
+        for profile in try list() {
+            if profile.id == id { continue }
+            if Self.normalizedPayload(profile.payload) == needle {
+                return profile.id
+            }
+        }
+        return nil
+    }
+
+    static func normalizedPayload(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func delete(id: UUID) throws {

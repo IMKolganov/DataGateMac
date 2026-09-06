@@ -17,6 +17,7 @@ struct ManualProfilesPageView: View {
     @State private var showAddSheet = false
     @State private var profilePendingDelete: ManualVpnProfile?
     @State private var profilePendingRename: ManualVpnProfile?
+    @State private var profilePendingEdit: ManualVpnProfile?
     @State private var renameDraft = ""
 
     private let store = ManualVpnProfileStore.shared
@@ -51,6 +52,8 @@ struct ManualProfilesPageView: View {
                     .foregroundStyle(.red)
             }
 
+            statusCard
+
             if profiles.isEmpty && loadError == nil {
                 emptyState
             } else {
@@ -72,14 +75,13 @@ struct ManualProfilesPageView: View {
             reloadProfiles()
         }
         .sheet(isPresented: $showAddSheet) {
-            AddManualProfileSheet { draft in
-                do {
-                    _ = try store.add(draft)
-                    actionError = nil
-                    reloadProfiles()
-                } catch {
-                    actionError = error.localizedDescription
-                }
+            AddManualProfileSheet(existing: nil) { draft in
+                saveDraft(draft, replacing: nil)
+            }
+        }
+        .sheet(item: $profilePendingEdit) { profile in
+            AddManualProfileSheet(existing: profile) { draft in
+                saveDraft(draft, replacing: profile)
             }
         }
         .alert(
@@ -122,6 +124,36 @@ struct ManualProfilesPageView: View {
         }
     }
 
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.tr("home_conn_status", "Connection status"))
+                .fontWeight(.semibold)
+            Text(vm.statusText)
+                .foregroundStyle(.secondary)
+            if !vm.activeTunnelSummary.isEmpty {
+                Text(vm.activeTunnelSummary)
+                    .font(.callout)
+            }
+            if !vm.recentConnectLogExcerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(vm.recentConnectLogExcerpt)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.tr("profiles_empty", "No local profiles yet."))
@@ -149,6 +181,7 @@ struct ManualProfilesPageView: View {
 
     private func profileCard(_ profile: ManualVpnProfile) -> some View {
         let connected = vm.isManualProfileConnected(profile.id)
+        let missingPayload = profile.payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(profile.displayName)
@@ -165,6 +198,17 @@ struct ManualProfilesPageView: View {
                         .foregroundStyle(.green)
                 }
             }
+            if missingPayload {
+                Text(L10n.tr("profiles_err_missing_payload", "The saved file for this profile is missing. Edit or delete it."))
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            if let lastError = vm.lastManualConnectErrorById[profile.id], !lastError.isEmpty {
+                Text(lastError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
             HStack(spacing: 10) {
                 if connected {
                     Button(L10n.tr("home_disconnect", "Disconnect")) {
@@ -177,8 +221,12 @@ struct ManualProfilesPageView: View {
                         vm.connectManualProfile(id: profile.id)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!vm.canTapManualConnect)
+                    .disabled(!vm.canTapManualConnect || missingPayload)
                 }
+                Button(L10n.tr("profiles_edit", "Edit")) {
+                    profilePendingEdit = profile
+                }
+                .buttonStyle(.bordered)
                 Button(L10n.tr("profiles_rename", "Rename")) {
                     renameDraft = profile.displayName
                     profilePendingRename = profile
@@ -226,6 +274,9 @@ struct ManualProfilesPageView: View {
             try store.rename(id: profile.id, displayName: renameDraft)
             actionError = nil
             reloadProfiles()
+            if let name = ManualVpnProfileImporter.sanitizeDisplayName(renameDraft) {
+                vm.noteRenamedManualProfile(id: profile.id, displayName: name)
+            }
         } catch {
             actionError = error.localizedDescription
         }
@@ -245,6 +296,21 @@ struct ManualProfilesPageView: View {
             actionError = error.localizedDescription
         }
         profilePendingDelete = nil
+    }
+
+    private func saveDraft(_ draft: ManualVpnProfileDraft, replacing existing: ManualVpnProfile?) {
+        do {
+            if let existing {
+                let updated = try store.replace(id: existing.id, draft: draft)
+                vm.noteRenamedManualProfile(id: updated.id, displayName: updated.displayName)
+            } else {
+                _ = try store.add(draft)
+            }
+            actionError = nil
+            reloadProfiles()
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -294,7 +360,7 @@ struct ManualProfilesPageView: View {
             if accessed { url.stopAccessingSecurityScopedResource() }
         }
         do {
-            let text = try String(contentsOf: url, encoding: .utf8)
+            let text = try ManualVpnProfileImporter.readTextFile(at: url)
             importRaw(text, fileName: url.lastPathComponent)
         } catch {
             actionError = error.localizedDescription
@@ -314,6 +380,7 @@ struct ManualProfilesPageView: View {
 }
 
 private struct AddManualProfileSheet: View {
+    let existing: ManualVpnProfile?
     let onSave: (ManualVpnProfileDraft) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -323,7 +390,9 @@ private struct AddManualProfileSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.tr("profiles_add_title", "Add local profile"))
+            Text(existing == nil
+                 ? L10n.tr("profiles_add_title", "Add local profile")
+                 : L10n.tr("profiles_edit_title", "Edit local profile"))
                 .font(.title3)
                 .fontWeight(.semibold)
             Text(L10n.tr("profiles_add_hint", "Paste a VLESS URI, JSON with vless / vlessXhttp, or a full OpenVPN client config. Username/password OpenVPN files are not supported yet."))
@@ -373,6 +442,12 @@ private struct AddManualProfileSheet: View {
         }
         .padding(24)
         .frame(minWidth: 560, minHeight: 420)
+        .onAppear {
+            if let existing {
+                name = existing.displayName
+                payload = existing.payload
+            }
+        }
     }
 
     private func pickFile() {
@@ -394,7 +469,7 @@ private struct AddManualProfileSheet: View {
                 if accessed { url.stopAccessingSecurityScopedResource() }
             }
             do {
-                payload = try String(contentsOf: url, encoding: .utf8)
+                payload = try ManualVpnProfileImporter.readTextFile(at: url)
                 if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     name = url.deletingPathExtension().lastPathComponent
                 }

@@ -255,4 +255,18 @@ enum ManualVpnProfileImporter {
         }
         return String(content[start.upperBound..<end.lowerBound])
     }
+
+    static func readTextFile(at url: URL) throws -> String {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        if let size = attrs[.size] as? NSNumber, size.intValue > maxPayloadUTF8Bytes {
+            throw ManualVpnImportError.tooLarge
+        }
+        if let utf8 = try? String(contentsOf: url, encoding: .utf8) {
+            return utf8
+        }
+        if let latin1 = try? String(contentsOf: url, encoding: .isoLatin1) {
+            return latin1
+        }
+        throw ManualVpnImportError.unrecognized
+    }
 }

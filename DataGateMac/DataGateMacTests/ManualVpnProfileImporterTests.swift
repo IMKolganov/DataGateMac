@@ -164,6 +164,40 @@ final class ManualVpnProfileStoreTests: XCTestCase {
         XCTAssertTrue(try store.list().isEmpty)
         XCTAssertThrowsError(try store.profile(id: added.id))
     }
+
+    func testRejectsDuplicatePayload() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ManualVpnProfileStore(directory: dir)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let draft = try ManualVpnProfileImporter.importPayload(
+            "vless://abc@10.1.2.3:443?type=tcp#stored"
+        )
+        _ = try store.add(draft)
+        XCTAssertThrowsError(try store.add(draft)) { error in
+            XCTAssertEqual(error as? ManualVpnProfileStoreError, .duplicate)
+        }
+    }
+
+    func testReplaceCanChangeKind() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ManualVpnProfileStore(directory: dir)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let vless = try ManualVpnProfileImporter.importPayload(
+            "vless://abc@10.1.2.3:443?type=tcp#stored"
+        )
+        let added = try store.add(vless)
+        let ovpn = try ManualVpnProfileImporter.importPayload("""
+        client
+        remote vpn.example.com 1194
+        proto udp
+        """)
+        let updated = try store.replace(id: added.id, draft: ovpn)
+        XCTAssertEqual(updated.id, added.id)
+        XCTAssertEqual(updated.kind, .openVpn)
+        XCTAssertEqual(try store.profile(id: added.id).kind, .openVpn)
+    }
 }
 
 private func profile(from draft: ManualVpnProfileDraft) -> ManualVpnProfile {

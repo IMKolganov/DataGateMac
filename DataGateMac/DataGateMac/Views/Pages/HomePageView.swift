@@ -85,6 +85,11 @@ struct HomePageView: View {
                             .font(.callout)
                             .foregroundStyle(.primary)
                     }
+                    if vm.connectedManualProfileId != nil, vm.isConnected || vm.isBusy {
+                        Text(L10n.tr("home_connected_local_profile", "Connected with a local profile from Profiles. Connect here switches to a DataGate server."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     HStack(spacing: 12) {
                         Button(L10n.tr("home_connect", "Connect")) {
                             vm.connect()
