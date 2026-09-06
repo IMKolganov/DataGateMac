@@ -386,7 +386,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 fail(error)
                 return
             }
-            ExtensionLogWriter.append("[Ext] Step 3: setTunnelNetworkSettings OK (10.51.0.2/24 default route, exclude loopback + VLESS host)")
+            ExtensionLogWriter.append("[Ext] Step 3: setTunnelNetworkSettings OK (10.51.0.2/24 default route, exclude VLESS host)")
 
             let tunFd = self.packetFlowSocketFileDescriptor()
             guard let tunFd else {
@@ -427,6 +427,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             ExtensionLogWriter.append("[Ext] Step 4: Xray JSON ready (\(xrayJson.utf8.count) bytes) socks=127.0.0.1:\(XrayConfigAssembler.socksListenPort) tunFd=\(tunFd)")
+            _ = setenv("xray.tun.fd", String(tunFd), 1)
+            _ = setenv("XRAY_TUN_FD", String(tunFd), 1)
 
             do {
                 try runner.runXrayJson(xrayJson)
@@ -468,14 +470,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteHost)
         let ipv4 = NEIPv4Settings(addresses: ["10.51.0.2"], subnetMasks: ["255.255.255.0"])
         ipv4.includedRoutes = [NEIPv4Route(destinationAddress: "0.0.0.0", subnetMask: "0.0.0.0")]
-        var excluded: [NEIPv4Route] = [
-            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
-        ]
+        var excluded: [NEIPv4Route] = []
         if let ip = Self.ipv4Address(forHost: remoteHost) {
             excluded.append(NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255"))
             ExtensionLogWriter.append("[Ext] Step 3: exclude VLESS endpoint \(ip)/32")
         }
-        ipv4.excludedRoutes = excluded
+        if !excluded.isEmpty {
+            ipv4.excludedRoutes = excluded
+        }
         settings.ipv4Settings = ipv4
         let dns = NEDNSSettings(servers: ["1.1.1.1", "8.8.8.8"])
         dns.matchDomains = [""]

@@ -5,6 +5,7 @@
 //  Merges libXray share-link outbounds with SOCKS + optional TUN inbound for NE.
 //
 
+import Darwin
 import Foundation
 
 enum XrayConfigAssembler {
@@ -19,16 +20,20 @@ enum XrayConfigAssembler {
         if outbounds.isEmpty {
             throw XrayConfigError.noOutbounds
         }
-        if ((outbounds[0]["tag"] as? String)?.isEmpty ?? true) {
-            var tagged = outbounds[0]
-            tagged["tag"] = "proxy"
-            outbounds[0] = tagged
+        outbounds = outbounds.enumerated().map { index, outbound in
+            prepareOutbound(outbound, fallbackTag: index == 0 ? "proxy" : "proxy-\(index)")
         }
         let hasFreedom = outbounds.contains { ($0["protocol"] as? String)?.lowercased() == "freedom" }
         if !hasFreedom {
             outbounds.append([
                 "protocol": "freedom",
                 "tag": "direct",
+            ])
+        }
+        if !outbounds.contains(where: { ($0["tag"] as? String) == "dns-out" }) {
+            outbounds.append([
+                "protocol": "dns",
+                "tag": "dns-out",
             ])
         }
         config["outbounds"] = outbounds
@@ -43,6 +48,10 @@ enum XrayConfigAssembler {
                     "udp": true,
                     "auth": "noauth",
                 ],
+                "sniffing": [
+                    "enabled": true,
+                    "destOverride": ["http", "tls", "quic", "fakedns"],
+                ] as [String: Any],
             ],
         ]
         if tunFileDescriptor != nil {
@@ -51,10 +60,12 @@ enum XrayConfigAssembler {
                 "protocol": "tun",
                 "settings": [
                     "mtu": 1500,
+                    "autoOutboundsInterface": "auto",
                 ] as [String: Any],
                 "sniffing": [
                     "enabled": true,
-                    "destOverride": ["http", "tls", "quic"],
+                    "destOverride": ["http", "tls", "quic", "fakedns"],
+                    "metadataOnly": false,
                 ] as [String: Any],
             ])
         }
@@ -63,27 +74,43 @@ enum XrayConfigAssembler {
         if config["log"] == nil {
             config["log"] = ["loglevel": "warning"]
         }
-        if config["dns"] == nil {
-            config["dns"] = ["servers": ["1.1.1.1", "8.8.8.8"]]
-        }
-        if config["routing"] == nil {
-            config["routing"] = [
-                "domainStrategy": "AsIs",
-                "rules": [
-                    [
-                        "type": "field",
-                        "outboundTag": "direct",
-                        "ip": [
-                            "10.0.0.0/8",
-                            "127.0.0.0/8",
-                            "169.254.0.0/16",
-                            "172.16.0.0/12",
-                            "192.168.0.0/16",
-                        ],
+        // App DNS is UDP/53 into the tunnel. VLESS/xHTTP often cannot carry UDP, so hijack
+        // those queries to FakeDNS and restore the name via sniffing instead.
+        config["dns"] = [
+            "queryStrategy": "UseIPv4",
+            "servers": ["fakedns", "1.1.1.1"],
+        ]
+        config["fakeDns"] = [
+            "ipPool": "198.18.0.0/15",
+            "poolSize": 65535,
+        ]
+        config["routing"] = [
+            "domainStrategy": "AsIs",
+            "rules": [
+                [
+                    "type": "field",
+                    "port": 53,
+                    "network": "udp",
+                    "outboundTag": "dns-out",
+                ],
+                [
+                    "type": "field",
+                    "ip": ["198.18.0.0/15"],
+                    "outboundTag": "proxy",
+                ],
+                [
+                    "type": "field",
+                    "outboundTag": "direct",
+                    "ip": [
+                        "10.0.0.0/8",
+                        "127.0.0.0/8",
+                        "169.254.0.0/16",
+                        "172.16.0.0/12",
+                        "192.168.0.0/16",
                     ],
                 ],
-            ]
-        }
+            ],
+        ]
 
         var env = (config["env"] as? [String: Any]) ?? [:]
         if let tunFileDescriptor {
@@ -99,6 +126,33 @@ enum XrayConfigAssembler {
             throw XrayConfigError.jsonEncodeFailed
         }
         return json
+    }
+
+    /// libXray stores the share-link remark in `sendThrough`. That field is a bind
+    /// address at runtime, so a name like "DataGate+🇵🇱+Poland" must be stripped.
+    static func prepareOutbound(_ raw: [String: Any], fallbackTag: String) -> [String: Any] {
+        var outbound = raw
+        if let sendThrough = outbound["sendThrough"] as? String {
+            let trimmed = sendThrough.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !isIpBindAddress(trimmed) {
+                outbound.removeValue(forKey: "sendThrough")
+            }
+        }
+        if ((outbound["tag"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            outbound["tag"] = fallbackTag
+        }
+        return outbound
+    }
+
+    static func isIpBindAddress(_ value: String) -> Bool {
+        let host = value.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? value
+        guard !host.isEmpty else { return false }
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, host, &addr4) == 1 {
+            return true
+        }
+        var addr6 = in6_addr()
+        return inet_pton(AF_INET6, host, &addr6) == 1
     }
 }
 

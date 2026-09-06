@@ -175,6 +175,10 @@ private func tunnelErrorLocalizedDescription(_ error: Error) -> String {
     case ("NEVPNErrorDomain", 14), (NEVPNConnectionErrorDomain, 14):
         return L10n.tr("vpn_err_ne_14", "Packet tunnel extension not available (code 14). The OS did not load the embedded extension. Install from /Applications, verify entitlements, reboot if needed.")
     default:
+        let detail = ns.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !detail.isEmpty {
+            return detail
+        }
         return String(
             format: L10n.tr("vpn_err_connection_failed_fmt", "Connection failed (%@ code %d)"),
             locale: L10n.activeLocaleForFormatting(),
