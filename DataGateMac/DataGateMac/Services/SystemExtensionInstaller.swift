@@ -92,17 +92,16 @@ enum SystemExtensionInstaller {
         }
         #endif
 
-        let needsDeactivateFirst = lastVersion != nil && lastVersion != currentVersion
-        if needsDeactivateFirst {
-            log.notice("Embedded sysex build \(currentVersion ?? "?") != last activated \(lastVersion ?? "?"); deactivating stale extension first")
-            try await submitRequest(deactivationRequest())
-        }
-
-        if lastHash != nil, lastHash != currentHash {
+        if lastVersion != nil, lastVersion != currentVersion {
+            log.notice("Embedded sysex build \(currentVersion ?? "?") != last activated \(lastVersion ?? "?"); submitting activation so the system can replace it")
+        } else if lastHash != nil, lastHash != currentHash {
             log.info("Embedded system extension binary changed; submitting activation (replace) request")
         } else {
             log.info("Submitting system extension activation request for \(TunnelConstants.packetTunnelBundleIdentifier, privacy: .public)")
         }
+        // Do not deactivate first. A version bump used to call deactivationRequest, then
+        // activate; if build 18 was already gone, macOS returned OSSystemExtensionError
+        // extensionNotFound (4) and Connect never submitted the replacement for 20.
         try await submitRequest(activationRequest())
         recordSuccessfulActivation()
     }
@@ -113,13 +112,6 @@ enum SystemExtensionInstaller {
             queue: .main
         )
         return request
-    }
-
-    private static func deactivationRequest() -> OSSystemExtensionRequest {
-        OSSystemExtensionRequest.deactivationRequest(
-            forExtensionWithIdentifier: TunnelConstants.packetTunnelBundleIdentifier,
-            queue: .main
-        )
     }
 
     private static func submitRequest(_ request: OSSystemExtensionRequest) async throws {
@@ -180,7 +172,31 @@ enum SystemExtensionInstaller {
                 finishOnce(with: .failure(ActivationError.userCancelled))
                 return
             }
-            finishOnce(with: .failure(ActivationError.requestFailed(error.localizedDescription)))
+            finishOnce(with: .failure(ActivationError.requestFailed(Self.describe(nsError))))
+        }
+
+        private static func describe(_ nsError: NSError) -> String {
+            guard nsError.domain == OSSystemExtensionErrorDomain else {
+                return nsError.localizedDescription
+            }
+            let detail: String
+            switch nsError.code {
+            case OSSystemExtensionError.extensionNotFound.rawValue:
+                detail = "extension not found (4). The previous build was probably already removed; Connect should retry activation without uninstalling first."
+            case OSSystemExtensionError.unsupportedParentBundleLocation.rawValue:
+                detail = "unsupported parent bundle location (3). Run DataGateMac from /Applications."
+            case OSSystemExtensionError.codeSignatureInvalid.rawValue:
+                detail = "code signature invalid (8)."
+            case OSSystemExtensionError.validationFailed.rawValue:
+                detail = "validation failed (9)."
+            case OSSystemExtensionError.forbiddenBySystemPolicy.rawValue:
+                detail = "forbidden by system policy (10). Allow the extension in System Settings."
+            case OSSystemExtensionError.authorizationRequired.rawValue:
+                detail = "authorization required (13). Approve the system extension prompt."
+            default:
+                detail = nsError.localizedDescription
+            }
+            return "OSSystemExtensionErrorDomain \(detail)"
         }
 
         private func finishOnce(with outcome: Result<Void, Error>) {

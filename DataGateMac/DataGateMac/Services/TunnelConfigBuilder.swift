@@ -3,8 +3,8 @@
 //  DataGateMac
 //
 //  Builds TunnelConfig from backend (server list + OVPN file), aligned with DataGate Linux / Win:
-//  automatic = best WSS server among quota-allowed, online-first, least loaded, round-robin vs last pick;
-//  manual = user-selected server id from the same pool.
+//  automatic = best quota-allowed server, online-first, least loaded, round-robin vs last pick;
+//  WSS servers use the local TCP↔WebSocket bridge; others use the issued OpenVPN remotes (UDP/TCP).
 //
 
 import Foundation
@@ -21,6 +21,7 @@ enum TunnelConfigBuildError: LocalizedError {
     case noExternalIdInJwt
     case fetchServersFailed(String)
     case noWssServersInPlan
+    case noServersInPlan
     case manualServerNotFound(Int)
     case manualServerNotWss(Int)
     case manualServerNotInQuotaPlan(Int)
@@ -36,6 +37,8 @@ enum TunnelConfigBuildError: LocalizedError {
             return L10n.trFormat("vpn_build_err_fetch_servers_fmt", "Could not load the server list: %@", detail)
         case .noWssServersInPlan:
             return L10n.tr("vpn_build_err_no_wss", "No WSS-enabled servers are available for your plan.")
+        case .noServersInPlan:
+            return L10n.tr("vpn_build_err_no_servers", "No servers are available for your plan.")
         case .manualServerNotFound(let id):
             return L10n.trFormat("vpn_build_err_server_not_found_fmt", "Server #%d was not found or is not available.", id)
         case .manualServerNotWss(let id):
@@ -57,11 +60,11 @@ private enum TunnelServerRotationPrefs {
 }
 
 enum TunnelConfigBuilder {
-    /// Rows for the Home server picker: WSS-enabled servers, sorted by display name.
+    /// Rows for the Home server picker: quota-allowed servers, sorted by display name.
     static func homeRows(from servers: [OpenVpnServerWithStatusDto]) -> [HomeVpnServerRow] {
         let rows: [HomeVpnServerRow] = servers.compactMap { dto in
             let s = dto.openVpnServerResponses.openVpnServer
-            guard s.isEnableWss == true, s.isAccessibleForUserQuotaPlan else { return nil }
+            guard dto.isOpenVpnConnectable else { return nil }
             let name = s.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
             let display = name.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", s.id) : name
             let clients = max(0, dto.countConnectedClients)
@@ -69,7 +72,9 @@ enum TunnelConfigBuilder {
                 id: s.id,
                 displayName: display,
                 isOnline: s.isOnline ?? false,
-                clientCount: clients
+                clientCount: clients,
+                usesWss: s.isEnableWss == true,
+                protocolLabel: s.listedLinkProtocol
             )
         }
         return rows.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
@@ -96,7 +101,7 @@ enum TunnelConfigBuilder {
             throw TunnelConfigBuildError.noExternalIdInJwt
         }
 
-        step("[Backend] Step 2: fetch server list (get-all-with-status)...")
+        step("[Backend] Step 2: fetch server list (api/v3/open-vpn-servers/get-all-with-status)...")
         let servers: [OpenVpnServerWithStatusDto]
         do {
             servers = try await serversClient.getAllWithStatus(token: token)
@@ -142,34 +147,61 @@ enum TunnelConfigBuilder {
             step("[Backend] FAIL: OVPN content decode empty")
             throw TunnelConfigBuildError.ovpnEmpty
         }
-        let listenPort = 18080
+        let usesWss = server.openVpnServerResponses.openVpnServer.isEnableWss == true
         let linkProtocol = TunnelLinkProtocol.fromOvpnConfigContent(originalOvpnContent)
-        let ovpnContent = patchOvpnConfigForLocalBridge(originalOvpnContent, listenPort: listenPort, linkProtocol: linkProtocol)
-        step("[Backend] Step 4: parsed transport -> \(linkProtocol.rawValue.uppercased()); patched OVPN for 127.0.0.1:\(listenPort)")
-
-        step("[Backend] Step 5: build TunnelConfig from server apiUrl...")
-        let apiUrl = server.openVpnServerResponses.openVpnServer.apiUrl
-        guard let url = URL(string: apiUrl),
-              let host = url.host else {
-            step("[Backend] FAIL: Invalid apiUrl: \(apiUrl)")
-            log.error("Invalid apiUrl: \(apiUrl)")
-            throw TunnelConfigBuildError.invalidApiUrl(apiUrl)
-        }
-        let port = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
-        let proxyPath = "/api/proxy?mode=\(linkProtocol.proxyMode)"
-        step("[Backend] Step 5: done -> \(host):\(port)\(proxyPath)")
-
+        let listenPort = 18080
         let displayName = server.openVpnServerResponses.openVpnServer.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let serverLabel = displayName.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", serverId) : displayName
 
+        if usesWss {
+            let ovpnContent = patchOvpnConfigForLocalBridge(originalOvpnContent, listenPort: listenPort, linkProtocol: .tcp)
+            step("[Backend] Step 5: server isEnableWss=true; WSS bridge + local TCP 127.0.0.1:\(listenPort) (upstream proxy mode=\(linkProtocol.proxyMode))")
+            let apiUrl = server.openVpnServerResponses.openVpnServer.apiUrl
+            guard let url = URL(string: apiUrl),
+                  let host = url.host else {
+                step("[Backend] FAIL: Invalid apiUrl: \(apiUrl)")
+                log.error("Invalid apiUrl: \(apiUrl)")
+                throw TunnelConfigBuildError.invalidApiUrl(apiUrl)
+            }
+            let port = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
+            let proxyPath = "/api/proxy?mode=\(linkProtocol.proxyMode)"
+            step("[Backend] Step 5: WSS -> \(host):\(port)\(proxyPath)")
+            return TunnelConfig(
+                host: host,
+                port: port,
+                path: proxyPath,
+                ovpnContent: ovpnContent,
+                listenPort: listenPort,
+                verifyServerCert: false,
+                linkProtocol: linkProtocol,
+                transportMode: .wss,
+                serverDisplayName: serverLabel,
+                serverId: serverId
+            )
+        }
+
+        guard let remote = OvpnProfileParser.firstRemote(in: originalOvpnContent) else {
+            step("[Backend] FAIL: issued OVPN has no usable remote (direct OpenVPN)")
+            throw TunnelConfigBuildError.ovpnEmpty
+        }
+        step("[Backend] Step 5: server isEnableWss=false; direct OpenVPN \(remote.host):\(remote.port) proto=\(linkProtocol.rawValue)")
+        for line in originalOvpnContent.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let head = trimmed.split(whereSeparator: \.isWhitespace).first.map(String.init)?.lowercased() ?? ""
+            if ["remote", "proto", "dev", "redirect-gateway"].contains(head) {
+                step("[Backend] OVPN \(trimmed)")
+            }
+        }
         return TunnelConfig(
-            host: host,
-            port: port,
-            path: proxyPath,
-            ovpnContent: ovpnContent,
+            host: remote.host,
+            port: remote.port,
+            path: "/",
+            ovpnContent: originalOvpnContent,
             listenPort: listenPort,
             verifyServerCert: false,
             linkProtocol: linkProtocol,
-            serverDisplayName: displayName.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", serverId) : displayName,
+            transportMode: .direct,
+            serverDisplayName: serverLabel,
             serverId: serverId
         )
     }
@@ -188,10 +220,10 @@ enum TunnelConfigBuilder {
     ) throws -> OpenVpnServerWithStatusDto {
         switch pick {
         case .automatic:
-            guard let s = pickBestWssServerWinStyle(servers) else {
-                onLog("[Backend] FAIL: No suitable WSS server (online + isEnableWss + quota plan)")
-                log.warning("No suitable WSS server")
-                throw TunnelConfigBuildError.noWssServersInPlan
+            guard let s = pickBestServerWinStyle(servers) else {
+                onLog("[Backend] FAIL: No suitable server (online preferred + quota plan)")
+                log.warning("No suitable server")
+                throw TunnelConfigBuildError.noServersInPlan
             }
             return s
         case .manual(let serverId):
@@ -199,25 +231,18 @@ enum TunnelConfigBuilder {
                 onLog("[Backend] FAIL: manual server id=\(serverId) not in list")
                 throw TunnelConfigBuildError.manualServerNotFound(serverId)
             }
-            let s = dto.openVpnServerResponses.openVpnServer
-            guard s.isEnableWss == true else {
-                onLog("[Backend] FAIL: manual server id=\(serverId) is not WSS-enabled")
-                throw TunnelConfigBuildError.manualServerNotWss(serverId)
-            }
-            guard s.isAccessibleForUserQuotaPlan else {
-                onLog("[Backend] FAIL: manual server id=\(serverId) not in user quota plan")
+            guard dto.isOpenVpnConnectable else {
+                onLog("[Backend] FAIL: manual server id=\(serverId) not connectable (quota, Xray, or disabled)")
                 throw TunnelConfigBuildError.manualServerNotInQuotaPlan(serverId)
             }
             return dto
         }
     }
 
-    /// Same ordering idea as DataGate Linux `pickBestServerWinStyle`: quota-filtered WSS servers, online first,
-    /// then fewer `countConnectedClients`, then round-robin when the previous auto pick is still in the list.
-    private static func pickBestWssServerWinStyle(_ servers: [OpenVpnServerWithStatusDto]) -> OpenVpnServerWithStatusDto? {
+    /// Quota-filtered servers, online first, then fewer connected clients, then round-robin vs last auto pick.
+    private static func pickBestServerWinStyle(_ servers: [OpenVpnServerWithStatusDto]) -> OpenVpnServerWithStatusDto? {
         var ranked: [OpenVpnServerWithStatusDto] = servers.filter { dto in
-            let s = dto.openVpnServerResponses.openVpnServer
-            return (s.isEnableWss ?? false) && s.isAccessibleForUserQuotaPlan
+            dto.isOpenVpnConnectable
         }
         guard !ranked.isEmpty else { return nil }
 

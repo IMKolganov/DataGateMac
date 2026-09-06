@@ -2,7 +2,8 @@
 //  OpenVpnServersApiClient.swift
 //  DataGateMac
 //
-//  Fetches server list from GET /api/open-vpn-servers/get-all-with-status.
+//  Fetches server list from GET /api/v3/open-vpn-servers/get-all-with-status.
+//  Legacy v1 GET /api/open-vpn-servers/get-all-with-status hides UDP and Xray (TCP OpenVPN only).
 //
 
 import Foundation
@@ -15,14 +16,18 @@ final class OpenVpnServersApiClient {
 
     static let shared = OpenVpnServersApiClient()
 
-    /// GET /api/open-vpn-servers/get-all-with-status. Requires Bearer token.
-    func getAllWithStatus(token: String) async throws -> [OpenVpnServerWithStatusDto] {
+    /// GET /api/v3/open-vpn-servers/get-all-with-status. Requires Bearer token.
+    func getAllWithStatus(token: String, withoutCache: Bool = false) async throws -> [OpenVpnServerWithStatusDto] {
         let config = try AppConfig.load()
         let baseUrl = config.apiBaseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !baseUrl.isEmpty else {
             throw ApiClientError.invalidConfig
         }
-        let url = URL(string: "\(baseUrl)/api/open-vpn-servers/get-all-with-status")!
+        var urlString = "\(baseUrl)/api/v3/open-vpn-servers/get-all-with-status"
+        if withoutCache {
+            urlString += "?withoutCache=true"
+        }
+        let url = URL(string: urlString)!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -34,7 +39,7 @@ final class OpenVpnServersApiClient {
         }
 
         let bodyPreview = String(data: data, encoding: .utf8).map { $0.prefix(2000) } ?? "<invalid utf8>"
-        log.info("GET get-all-with-status → HTTP \(http.statusCode), body: \(String(describing: bodyPreview))")
+        log.info("GET api/v3/open-vpn-servers/get-all-with-status withoutCache=\(withoutCache) → HTTP \(http.statusCode), body: \(String(describing: bodyPreview))")
 
         if http.statusCode == 401 || http.statusCode == 403 {
             throw ApiClientError.unauthorized

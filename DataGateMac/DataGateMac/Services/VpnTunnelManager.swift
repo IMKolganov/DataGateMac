@@ -89,7 +89,12 @@ func patchOvpnConfigForLocalBridge(_ originalContent: String, listenPort: Int, l
     return out.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
 }
 
-/// Config passed to the Packet Tunnel extension (WSS + OVPN).
+enum TunnelTransportMode: String, Sendable {
+    case wss
+    case direct
+}
+
+/// Config passed to the Packet Tunnel extension (WSS and/or direct OpenVPN).
 struct TunnelConfig: Sendable {
     var host: String
     var port: Int
@@ -98,6 +103,7 @@ struct TunnelConfig: Sendable {
     var listenPort: Int
     var verifyServerCert: Bool
     var linkProtocol: TunnelLinkProtocol
+    var transportMode: TunnelTransportMode
     /// Backend `serverName` (e.g. country + city); shown in the host app when connected.
     var serverDisplayName: String
     var serverId: Int?
@@ -111,6 +117,7 @@ struct TunnelConfig: Sendable {
             "listenPort": listenPort,
             "verifyServerCert": verifyServerCert,
             "linkProtocol": linkProtocol.rawValue,
+            "transportMode": transportMode.rawValue,
             "serverDisplayName": serverDisplayName,
         ]
         if let serverId {
@@ -126,6 +133,8 @@ struct TunnelConfig: Sendable {
               let ovpnContent = dictionary["ovpnContent"] as? String
         else { return nil }
         let display = (dictionary["serverDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let modeRaw = (dictionary["transportMode"] as? String ?? "").lowercased()
+        let transportMode = TunnelTransportMode(rawValue: modeRaw) ?? .wss
         return TunnelConfig(
             host: host,
             port: port,
@@ -134,6 +143,7 @@ struct TunnelConfig: Sendable {
             listenPort: (dictionary["listenPort"] as? Int) ?? 18080,
             verifyServerCert: (dictionary["verifyServerCert"] as? Bool) ?? false,
             linkProtocol: TunnelLinkProtocol(rawValue: (dictionary["linkProtocol"] as? String ?? "").lowercased()) ?? .tcp,
+            transportMode: transportMode,
             serverDisplayName: display.isEmpty ? host : display,
             serverId: dictionary["serverId"] as? Int
         )
