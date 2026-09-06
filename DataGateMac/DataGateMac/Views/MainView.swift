@@ -2,7 +2,7 @@
 //  MainView.swift
 //  DataGateMac
 //
-//  Main layout with sidebar navigation (Home, Access, Statistics, Settings).
+//  Main layout with sidebar navigation (Home, Access, Profiles, Statistics, Settings).
 //
 
 import SwiftUI
@@ -10,6 +10,7 @@ import SwiftUI
 enum NavItem: String, CaseIterable, Identifiable {
     case home
     case access
+    case profiles
     case statistics
     case settings
 
@@ -19,6 +20,7 @@ enum NavItem: String, CaseIterable, Identifiable {
         switch self {
         case .home: return L10n.tr("nav_home", "Home")
         case .access: return L10n.tr("nav_access", "Access")
+        case .profiles: return L10n.tr("nav_profiles", "Profiles")
         case .statistics: return L10n.tr("nav_statistics", "Statistics")
         case .settings: return L10n.tr("nav_settings", "Settings")
         }
@@ -28,6 +30,7 @@ enum NavItem: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house.fill"
         case .access: return "cable.connector"
+        case .profiles: return "list.bullet.rectangle.fill"
         case .statistics: return "chart.bar.fill"
         case .settings: return "gearshape.fill"
         }
@@ -36,7 +39,13 @@ enum NavItem: String, CaseIterable, Identifiable {
 
 struct MainView: View {
     @ObservedObject var authState: AuthStateStore
+    @StateObject private var vpn: VpnViewModel
     @AppStorage("mainSidebarNavSelection") private var navSelectionRaw: String = NavItem.home.rawValue
+
+    init(authState: AuthStateStore) {
+        self.authState = authState
+        _vpn = StateObject(wrappedValue: VpnViewModel(authState: authState))
+    }
 
     private var navSelection: Binding<NavItem> {
         Binding(
@@ -95,9 +104,11 @@ struct MainView: View {
             Group {
                 switch NavItem(rawValue: navSelectionRaw) ?? .home {
                 case .home:
-                    HomePageView(authState: authState)
+                    HomePageView(authState: authState, vm: vpn)
                 case .access:
                     AccessPageView(authState: authState)
+                case .profiles:
+                    ManualProfilesPageView(vm: vpn)
                 case .statistics:
                     StatisticsPageView(authState: authState)
                 case .settings:

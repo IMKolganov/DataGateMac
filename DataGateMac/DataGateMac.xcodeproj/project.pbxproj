@@ -25,6 +25,7 @@
 		DAB200042FD4000100A1B2C3 /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB200032FD4000100A1B2C3 /* SystemExtensions.framework */; };
 		DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */; };
 		DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00112F6100100C61F86 /* AuthProfileTests.swift */; };
+		DA5T00222F7100100C61F86 /* ManualVpnProfileImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +83,7 @@
 		DAB200032FD4000100A1B2C3 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
 		DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnProfileMigrationPolicyTests.swift; sourceTree = "<group>"; };
 		DA5T00112F6100100C61F86 /* AuthProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthProfileTests.swift; sourceTree = "<group>"; };
+		DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualVpnProfileImporterTests.swift; sourceTree = "<group>"; };
 		DA5T00062F5000100C61F86 /* DataGateMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DataGateMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -141,6 +143,7 @@
 			children = (
 				DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */,
 				DA5T00112F6100100C61F86 /* AuthProfileTests.swift */,
+				DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */,
 			);
 			path = DataGateMacTests;
 			sourceTree = "<group>";
@@ -401,6 +404,7 @@
 			files = (
 				DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */,
 				DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */,
+				DA5T00222F7100100C61F86 /* ManualVpnProfileImporterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -45,6 +45,17 @@ enum XrayClientLinkParser {
         return (host, port)
     }
 
+    /// Share-link remark (`#fragment`), used as a local profile display name.
+    static func displayName(fromVless uri: String) -> String? {
+        guard let url = URL(string: uri.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let rawFragment = url.fragment, !rawFragment.isEmpty else {
+            return nil
+        }
+        let fragment = (rawFragment.removingPercentEncoding ?? rawFragment)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return fragment.isEmpty ? nil : fragment
+    }
+
     private static func firstVlessField(_ object: [String: Any], keys: [String]) -> String? {
         for key in keys {
             if let value = object[key] as? String {

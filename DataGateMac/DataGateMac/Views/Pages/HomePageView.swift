@@ -8,12 +8,7 @@ import SwiftUI
 
 struct HomePageView: View {
     @ObservedObject var authState: AuthStateStore
-    @StateObject private var vm: VpnViewModel
-
-    init(authState: AuthStateStore) {
-        self.authState = authState
-        _vm = StateObject(wrappedValue: VpnViewModel(authState: authState))
-    }
+    @ObservedObject var vm: VpnViewModel
 
     private var extensionSeparator: String {
         L10n.tr("vpn_extension_log_separator", "--- Extension ---")
@@ -211,6 +206,6 @@ struct HomePageView: View {
 
 struct HomePageView_Previews: PreviewProvider {
     static var previews: some View {
-        HomePageView(authState: AuthStateStore())
+        HomePageView(authState: AuthStateStore(), vm: VpnViewModel())
     }
 }

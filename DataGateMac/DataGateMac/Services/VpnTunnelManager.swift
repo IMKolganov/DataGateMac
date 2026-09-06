@@ -110,6 +110,8 @@ struct TunnelConfig: Sendable {
     /// Backend `serverName` (e.g. country + city); shown in the host app when connected.
     var serverDisplayName: String
     var serverId: Int?
+    /// Set when the tunnel was started from a locally imported profile (no backend stats).
+    var manualProfileId: String? = nil
 
     func toProviderConfiguration() -> [String: Any] {
         var dict: [String: Any] = [
@@ -126,6 +128,9 @@ struct TunnelConfig: Sendable {
         ]
         if let serverId {
             dict["serverId"] = serverId
+        }
+        if let manualProfileId, !manualProfileId.isEmpty {
+            dict["manualProfileId"] = manualProfileId
         }
         return dict
     }
@@ -156,7 +161,8 @@ struct TunnelConfig: Sendable {
             linkProtocol: TunnelLinkProtocol(rawValue: (dictionary["linkProtocol"] as? String ?? "").lowercased()) ?? .tcp,
             transportMode: transportMode,
             serverDisplayName: display.isEmpty ? host : display,
-            serverId: dictionary["serverId"] as? Int
+            serverId: dictionary["serverId"] as? Int,
+            manualProfileId: dictionary["manualProfileId"] as? String
         )
     }
 
@@ -490,6 +496,15 @@ final class VpnTunnelManager: ObservableObject {
         manager.protocolConfiguration = proto
         try await saveManagerToPreferences(manager)
         onLog?("[Tunnel] Step: config saved.")
+    }
+
+    /// Config last saved on the DataGate NE profile, if any.
+    func currentTunnelConfig() -> TunnelConfig? {
+        guard let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol,
+              let dict = proto.providerConfiguration else {
+            return nil
+        }
+        return TunnelConfig.from(dictionary: dict)
     }
 
     /// Reloads manager from system preferences so the system sees the current app/extension path (helps avoid code 14 when running from Xcode).
