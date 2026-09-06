@@ -87,7 +87,13 @@ struct OpenVpnServerWithStatusDto: Decodable, Identifiable {
 
     var isOpenVpnConnectable: Bool {
         let s = openVpnServerResponses.openVpnServer
-        return s.serverType != .xray && !s.isDeleted && !s.isDisabled && s.isAccessibleForUserQuotaPlan
+        return s.serverType != .xray && isConnectable
+    }
+
+    /// Quota-allowed, not deleted/disabled — OpenVPN or Xray.
+    var isConnectable: Bool {
+        let s = openVpnServerResponses.openVpnServer
+        return !s.isDeleted && !s.isDisabled && s.isAccessibleForUserQuotaPlan
     }
 }
 

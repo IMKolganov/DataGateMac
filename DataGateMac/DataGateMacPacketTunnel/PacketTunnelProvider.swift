@@ -15,6 +15,7 @@ private enum PacketTunnelStartupError: LocalizedError {
     case missingProviderConfiguration
     case missingHost
     case missingOpenVpnProfile
+    case missingXrayProfile
     case openVpnEngineNotIntegrated
 
     var errorDescription: String? {
@@ -25,6 +26,8 @@ private enum PacketTunnelStartupError: LocalizedError {
             return "Tunnel host is missing from provider configuration."
         case .missingOpenVpnProfile:
             return "OVPN profile content is empty. Backend config was not loaded."
+        case .missingXrayProfile:
+            return "Xray VLESS share link is empty. Backend config was not loaded."
         case .openVpnEngineNotIntegrated:
             return "Packet tunnel extension started, but the VPN engine is not integrated yet. The WSS bridge can start, but no VPN session is created."
         }
@@ -38,6 +41,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private var wssBridge: WSSBridge?
     private var packetFlowBridge: PacketFlowBridge?
     private var openVpnRunner: OpenVPNRunnerBridge?
+    private var xrayRunner: XrayRunnerBridge?
     private var openVpnEngineWarningLogged = false
 
     override init() {
@@ -79,15 +83,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let verifyServerCert = (providerConfig["verifyServerCert"] as? Bool) ?? false
         let linkProtocol = providerConfig["linkProtocol"] as? String ?? "tcp"
         let ovpnContent = providerConfig["ovpnContent"] as? String ?? ""
+        let xrayShareLink = providerConfig["xrayShareLink"] as? String ?? ""
         let hasOvpn = !ovpnContent.isEmpty
         let transportMode = (providerConfig["transportMode"] as? String ?? "").lowercased()
         let useDirect = transportMode == "direct"
+        let useXray = transportMode == "xray"
         let upstreamWss = "wss://\(host):\(port)\(pathNormalized)"
         let serverDisplayName = (providerConfig["serverDisplayName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let serverId = Self.intFromProvider(providerConfig["serverId"])
 
-        log.info("[Ext] Step 1: config mode=\(transportMode) useDirect=\(useDirect) host=\(host) port=\(port) path=\(pathNormalized) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn)")
-        ExtensionLogWriter.append("[Ext] Step 1: providerConfiguration mode=\(transportMode) useDirect=\(useDirect) host=\(host) remotePort=\(port) path=\(pathNormalized) linkProtocol=\(linkProtocol) verifyServerCert=\(verifyServerCert)")
+        log.info("[Ext] Step 1: config mode=\(transportMode) useDirect=\(useDirect) useXray=\(useXray) host=\(host) port=\(port) path=\(pathNormalized) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn) hasXray=\(!xrayShareLink.isEmpty)")
+        ExtensionLogWriter.append("[Ext] Step 1: providerConfiguration mode=\(transportMode) useDirect=\(useDirect) useXray=\(useXray) host=\(host) remotePort=\(port) path=\(pathNormalized) linkProtocol=\(linkProtocol) verifyServerCert=\(verifyServerCert)")
         if !serverDisplayName.isEmpty {
             if let serverId {
                 ExtensionLogWriter.append("[Ext] Step 1: backend server label=\(serverDisplayName) id=\(serverId)")
@@ -98,6 +104,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         guard !host.isEmpty else {
             fail(PacketTunnelStartupError.missingHost)
+            return
+        }
+        if useXray {
+            guard !xrayShareLink.isEmpty else {
+                fail(PacketTunnelStartupError.missingXrayProfile)
+                return
+            }
+            startXray(host: host, port: port, shareLink: xrayShareLink, fail: fail, succeed: succeed)
             return
         }
         guard hasOvpn else {
@@ -233,6 +247,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         packetFlowBridge = nil
         openVpnRunner?.stop()
         openVpnRunner = nil
+        xrayRunner?.stopXray()
+        xrayRunner = nil
         completionHandler()
     }
 
@@ -349,6 +365,159 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             runner.injectDataPackets(fromTunnel: [packet], protocols: [NSNumber(value: family)])
         }
         flowBridge.startReadLoop()
+    }
+
+    // MARK: - Xray (VLESS via libXray)
+
+    private func startXray(
+        host: String,
+        port: Int,
+        shareLink: String,
+        fail: @escaping (Error) -> Void,
+        succeed: @escaping () -> Void
+    ) {
+        log.info("[Ext] Step 2: Xray VLESS \(host):\(port)")
+        ExtensionLogWriter.append("[Ext] Step 2: Xray remote=\(host):\(port) shareBytes=\(shareLink.utf8.count)")
+
+        let settings = createXrayTunnelNetworkSettings(remoteHost: host)
+        setTunnelNetworkSettings(settings) { [weak self] error in
+            guard let self else { return }
+            if let error {
+                fail(error)
+                return
+            }
+            ExtensionLogWriter.append("[Ext] Step 3: setTunnelNetworkSettings OK (10.51.0.2/24 default route, exclude loopback + VLESS host)")
+
+            let tunFd = self.packetFlowSocketFileDescriptor()
+            guard let tunFd else {
+                fail(NSError(
+                    domain: "PacketTunnelProvider",
+                    code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not read the packet-flow utun file descriptor for Xray."]
+                ))
+                return
+            }
+            ExtensionLogWriter.append("[Ext] Step 3: packetFlow utun fd=\(tunFd)")
+
+            let runner = XrayRunnerBridge { line in
+                ExtensionLogWriter.append(line)
+            }
+            self.xrayRunner = runner
+
+            var shareConfig: NSDictionary?
+            do {
+                try runner.convertShareLink(shareLink, outboundConfig: &shareConfig)
+            } catch {
+                fail(error)
+                return
+            }
+            guard let shareConfig = shareConfig as? [String: Any] else {
+                fail(XrayConfigError.noOutbounds)
+                return
+            }
+
+            let xrayJson: String
+            do {
+                xrayJson = try XrayConfigAssembler.makeRuntimeConfig(
+                    shareConfig: shareConfig,
+                    tunFileDescriptor: tunFd
+                )
+            } catch {
+                fail(error)
+                return
+            }
+            ExtensionLogWriter.append("[Ext] Step 4: Xray JSON ready (\(xrayJson.utf8.count) bytes) socks=127.0.0.1:\(XrayConfigAssembler.socksListenPort) tunFd=\(tunFd)")
+
+            do {
+                try runner.runXrayJson(xrayJson)
+            } catch {
+                fail(error)
+                return
+            }
+            self.log.info("[Ext] Step 5: libXray runXray OK")
+            ExtensionLogWriter.append("[Ext] Step 5: libXray runXray OK")
+            succeed()
+        }
+    }
+
+    /// NEPacketTunnelFlow's underlying utun socket (KVC, then scan like Xray-core iOS notes).
+    private func packetFlowSocketFileDescriptor() -> Int32? {
+        let flow = packetFlow as NSObject
+        if let number = flow.value(forKeyPath: "socket.fileDescriptor") as? NSNumber {
+            let fd = number.int32Value
+            if fd >= 0 { return fd }
+        }
+        var buf = [CChar](repeating: 0, count: 16)
+        for fd in Int32(0)...1024 {
+            var len = socklen_t(buf.count)
+            let rc = buf.withUnsafeMutableBytes { raw -> Int32 in
+                guard let base = raw.baseAddress else { return -1 }
+                return getsockopt(fd, 2, 2, base, &len)
+            }
+            if rc == 0 {
+                let name = String(cString: buf)
+                if name.hasPrefix("utun") {
+                    return fd
+                }
+            }
+        }
+        return nil
+    }
+
+    private func createXrayTunnelNetworkSettings(remoteHost: String) -> NEPacketTunnelNetworkSettings {
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteHost)
+        let ipv4 = NEIPv4Settings(addresses: ["10.51.0.2"], subnetMasks: ["255.255.255.0"])
+        ipv4.includedRoutes = [NEIPv4Route(destinationAddress: "0.0.0.0", subnetMask: "0.0.0.0")]
+        var excluded: [NEIPv4Route] = [
+            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
+        ]
+        if let ip = Self.ipv4Address(forHost: remoteHost) {
+            excluded.append(NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255"))
+            ExtensionLogWriter.append("[Ext] Step 3: exclude VLESS endpoint \(ip)/32")
+        }
+        ipv4.excludedRoutes = excluded
+        settings.ipv4Settings = ipv4
+        let dns = NEDNSSettings(servers: ["1.1.1.1", "8.8.8.8"])
+        dns.matchDomains = [""]
+        settings.dnsSettings = dns
+        settings.mtu = 1500
+        return settings
+    }
+
+    private static func ipv4Address(forHost host: String) -> String? {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        var addr = in_addr()
+        if inet_pton(AF_INET, trimmed, &addr) == 1 {
+            return trimmed
+        }
+        var hints = addrinfo(
+            ai_flags: AI_ADDRCONFIG,
+            ai_family: AF_INET,
+            ai_socktype: SOCK_STREAM,
+            ai_protocol: IPPROTO_TCP,
+            ai_addrlen: 0,
+            ai_canonname: nil,
+            ai_addr: nil,
+            ai_next: nil
+        )
+        var result: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(trimmed, nil, &hints, &result) == 0 else { return nil }
+        defer { freeaddrinfo(result) }
+        guard let first = result else { return nil }
+        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        guard getnameinfo(
+            first.pointee.ai_addr,
+            socklen_t(first.pointee.ai_addrlen),
+            &hostname,
+            socklen_t(hostname.count),
+            nil,
+            0,
+            NI_NUMERICHOST
+        ) == 0 else {
+            return nil
+        }
+        return String(cString: hostname)
     }
 
     private static func intFromProvider(_ raw: Any?) -> Int? {

@@ -63,6 +63,8 @@
 "home_server_section" = "VPN server";
 "home_server_section_hint" = "Pick a location or use automatic selection (same approach as DataGate on Windows and Linux).";
 "home_server_wss_suffix" = " · WSS";
+"home_server_xray_label" = "Xray";
+"home_server_xray_suffix" = " · Xray";
 "home_vpn_hint_blocked" = "Clears the saved DataGate VPN entry, then try Connect again and allow the system prompt. Also remove DataGate in System Settings → VPN if it still appears.";
 "home_vpn_hint_code14" = "Use after copying the app to /Applications: clears the saved DataGate VPN entry so Connect registers the tunnel again.";
 "home_vpn_warn_blocked" = "macOS may be blocking VPN profile updates (permission denied or error 5).";
@@ -80,6 +82,17 @@
 "login_status_starting" = "Starting sign-in…";
 "login_subtitle" = "登录以继续";
 "login_title" = "DataGate";
+"login_totp_again" = "Sign in again";
+"login_totp_back" = "Back to sign in";
+"login_totp_expired" = "This verification step expired. Sign in again.";
+"login_totp_lead" = "Enter the 6-digit code from your authenticator app to finish signing in.";
+"login_totp_lead_named_fmt" = "Signed in as %@. Enter the 6-digit code from your authenticator app to finish signing in.";
+"login_totp_placeholder" = "000000";
+"login_totp_status" = "Authenticator code required.";
+"login_totp_still_required" = "Two-factor verification did not complete. Try again.";
+"login_totp_title" = "Two-factor authentication";
+"login_totp_verify" = "Verify and sign in";
+"login_totp_verifying" = "Verifying…";
 "main_logged_in" = "已登录";
 "nav_access" = "访问";
 "nav_home" = "主页";
@@ -95,6 +108,7 @@
 "oauth_listener_entitlement" = "Cannot start OAuth redirect server (Operation not permitted). Add \"Incoming Network Connections\" entitlement.";
 "oauth_listener_failed" = "Failed to initialize OAuth listener.";
 "oauth_no_code" = "Authorization code was not returned.";
+"oauth_no_token" = "No access token was returned by the server.";
 "oauth_page_brand" = "DataGate";
 "oauth_page_title" = "DataGate";
 "oauth_state_mismatch" = "State validation failed.";
@@ -176,6 +190,8 @@
 "vpn_build_err_server_no_wss_fmt" = "Server #%d does not support WSS transport.";
 "vpn_build_err_server_not_found_fmt" = "Server #%d was not found or is not available.";
 "vpn_build_err_server_not_in_plan_fmt" = "Server #%d is not included in your quota plan.";
+"vpn_build_err_xray_empty" = "The Xray client link from the server was empty.";
+"vpn_build_err_xray_fmt" = "Could not download the Xray client link: %@";
 "vpn_err_config_detail_fmt" = "%@ [%@ code %d]";
 "vpn_err_connection_failed_fmt" = "Connection failed (%@ code %d)";
 "vpn_err_ne_14" = "Packet tunnel extension not available (code 14). The OS did not load the embedded extension. Install from /Applications, verify entitlements, reboot if needed.";

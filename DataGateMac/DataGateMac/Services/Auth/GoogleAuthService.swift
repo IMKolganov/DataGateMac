@@ -44,6 +44,11 @@ final class OAuthCanceller {
     }
 }
 
+enum GoogleSignInOutcome: Sendable {
+    case signedIn(GoogleLoginResponse)
+    case totpRequired(loginChallengeId: String, displayName: String)
+}
+
 final class GoogleAuthService {
     private let config: AppConfig
     private let redirectTimeout: TimeInterval = 180
@@ -56,7 +61,7 @@ final class GoogleAuthService {
     func signInAndLogin(
         canceller: OAuthCanceller? = nil,
         onProgress: ((String) -> Void)? = nil
-    ) async throws -> GoogleLoginResponse {
+    ) async throws -> GoogleSignInOutcome {
         let redirectUri = "http://127.0.0.1:\(config.redirectPort)/"
         let state = Self.generateState()
         let pkce = PkcePair.createS256()
@@ -109,7 +114,36 @@ final class GoogleAuthService {
         guard apiResponse.success, let data = apiResponse.data else {
             throw AuthError.apiLoginFailed(apiResponse.message)
         }
-        return data
+        return try outcome(from: data)
+    }
+
+    func verifyTotpLogin(loginChallengeId: String, code: String) async throws -> GoogleLoginResponse {
+        let request = TotpVerifyLoginRequest(
+            loginChallengeId: loginChallengeId,
+            code: TotpCode.normalize(code)
+        )
+        let apiUrl = "\(config.apiBaseUrl)/api/auth/totp/verify-login"
+        let apiResponse: ApiResponse<GoogleLoginResponse> = try await postJson(apiUrl, body: request)
+        guard apiResponse.success, let data = apiResponse.data else {
+            throw AuthError.apiLoginFailed(apiResponse.message)
+        }
+        let result = try outcome(from: data)
+        switch result {
+        case .signedIn(let response):
+            return response
+        case .totpRequired:
+            throw AuthError.apiLoginFailed(L10n.tr("login_totp_still_required", "Two-factor verification did not complete. Try again."))
+        }
+    }
+
+    private func outcome(from data: GoogleLoginResponse) throws -> GoogleSignInOutcome {
+        if data.isTotpChallenge, let challengeId = data.loginChallengeId {
+            return .totpRequired(loginChallengeId: challengeId, displayName: data.displayName)
+        }
+        guard data.hasAccessToken else {
+            throw AuthError.noTokenReturned
+        }
+        return .signedIn(data)
     }
 
     private static func buildAuthorizationUrl(
@@ -331,6 +365,19 @@ final class GoogleAuthService {
             .replacingOccurrences(of: "/", with: "_")
     }
 
+    private static func apiErrorMessage(from data: Data, statusCode: Int) -> String {
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let message = obj["message"] as? String, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return message
+            }
+            if let detail = obj["detail"] as? String, !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return detail
+            }
+        }
+        let bodyStr = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return bodyStr.isEmpty ? "HTTP \(statusCode)" : "\(statusCode): \(bodyStr)"
+    }
+
     private func postJson<T: Encodable, R: Decodable>(_ urlString: String, body: T) async throws -> R {
         var request = URLRequest(url: URL(string: urlString)!)
         request.httpMethod = "POST"
@@ -343,8 +390,7 @@ final class GoogleAuthService {
             throw AuthError.httpError("Invalid response")
         }
         guard (200...299).contains(http.statusCode) else {
-            let bodyStr = String(data: data, encoding: .utf8) ?? ""
-            throw AuthError.apiLoginFailed("\(http.statusCode): \(bodyStr)")
+            throw AuthError.apiLoginFailed(Self.apiErrorMessage(from: data, statusCode: http.statusCode))
         }
 
         let decoder = JSONDecoder()
@@ -383,6 +429,7 @@ final class GoogleAuthService {
         case httpError(String)
         case apiLoginFailed(String)
         case cancelled
+        case noTokenReturned
 
         var errorDescription: String? {
             switch self {
@@ -404,6 +451,7 @@ final class GoogleAuthService {
                     msg
                 )
             case .cancelled: return L10n.tr("oauth_cancelled", "Sign-in cancelled.")
+            case .noTokenReturned: return L10n.tr("oauth_no_token", "No access token was returned by the server.")
             }
         }
     }

@@ -225,7 +225,7 @@ final class OpenVpnServerV3DecodeTests: XCTestCase {
         XCTAssertEqual(rows[0].openVpnServerResponses.openVpnServer.listedLinkProtocol, "TCP")
     }
 
-    func testHomeRowsSkipXray() throws {
+    func testHomeRowsIncludeXray() throws {
         let json = """
         {
           "success": true,
@@ -250,6 +250,28 @@ final class OpenVpnServerV3DecodeTests: XCTestCase {
         let decoded = try JSONDecoder().decode(ApiResponse<OpenVpnServerWithStatusesResponse>.self, from: json)
         let rows = decoded.data?.openVpnServerWithStatuses ?? []
         XCTAssertEqual(rows[0].openVpnServerResponses.openVpnServer.serverType, .xray)
-        XCTAssertTrue(TunnelConfigBuilder.homeRows(from: rows).isEmpty)
+        XCTAssertFalse(rows[0].isOpenVpnConnectable)
+        XCTAssertTrue(rows[0].isConnectable)
+        let home = TunnelConfigBuilder.homeRows(from: rows)
+        XCTAssertEqual(home.map(\.displayName), ["Xray node"])
+        XCTAssertEqual(home.first?.isXray, true)
+    }
+
+    func testXrayClientLinkParserExtractsVlessFromJsonProfile() {
+        let payload = """
+        {"vless":"vless://uuid@xs1-hel2.datagateapp.com:443?encryption=none&security=tls&type=tcp#hel","vlessXhttp":"vless://uuid@xs1-hel2.datagateapp.com:2053?encryption=none&security=tls&type=xhttp#hel-xhttp"}
+        """
+        let uri = XrayClientLinkParser.extractVlessUri(fromRawContent: payload)
+        XCTAssertEqual(uri, "vless://uuid@xs1-hel2.datagateapp.com:443?encryption=none&security=tls&type=tcp#hel")
+        let remote = XrayClientLinkParser.remote(fromVless: uri ?? "")
+        XCTAssertEqual(remote?.host, "xs1-hel2.datagateapp.com")
+        XCTAssertEqual(remote?.port, 443)
+    }
+
+    func testXrayClientLinkParserPrefersPlainVlessLine() {
+        let uri = XrayClientLinkParser.extractVlessUri(fromRawContent: "vless://abc@10.1.2.3:8443?type=tcp")
+        XCTAssertEqual(uri, "vless://abc@10.1.2.3:8443?type=tcp")
+        XCTAssertEqual(XrayClientLinkParser.remote(fromVless: uri ?? "")?.host, "10.1.2.3")
+        XCTAssertEqual(XrayClientLinkParser.remote(fromVless: uri ?? "")?.port, 8443)
     }
 }

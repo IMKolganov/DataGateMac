@@ -92,14 +92,17 @@ func patchOvpnConfigForLocalBridge(_ originalContent: String, listenPort: Int, l
 enum TunnelTransportMode: String, Sendable {
     case wss
     case direct
+    case xray
 }
 
-/// Config passed to the Packet Tunnel extension (WSS and/or direct OpenVPN).
+/// Config passed to the Packet Tunnel extension (WSS, direct OpenVPN, or Xray/VLESS).
 struct TunnelConfig: Sendable {
     var host: String
     var port: Int
     var path: String
     var ovpnContent: String
+    /// VLESS share URI (or JSON profile text) when `transportMode == .xray`.
+    var xrayShareLink: String
     var listenPort: Int
     var verifyServerCert: Bool
     var linkProtocol: TunnelLinkProtocol
@@ -114,6 +117,7 @@ struct TunnelConfig: Sendable {
             "port": port,
             "path": path,
             "ovpnContent": ovpnContent,
+            "xrayShareLink": xrayShareLink,
             "listenPort": listenPort,
             "verifyServerCert": verifyServerCert,
             "linkProtocol": linkProtocol.rawValue,
@@ -128,18 +132,25 @@ struct TunnelConfig: Sendable {
 
     static func from(dictionary: [String: Any]) -> TunnelConfig? {
         guard let host = dictionary["host"] as? String,
-              let port = dictionary["port"] as? Int,
-              let path = dictionary["path"] as? String,
-              let ovpnContent = dictionary["ovpnContent"] as? String
+              let port = dictionary["port"] as? Int
         else { return nil }
+        let path = dictionary["path"] as? String ?? "/"
+        let ovpnContent = dictionary["ovpnContent"] as? String ?? ""
+        let xrayShareLink = dictionary["xrayShareLink"] as? String ?? ""
         let display = (dictionary["serverDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let modeRaw = (dictionary["transportMode"] as? String ?? "").lowercased()
         let transportMode = TunnelTransportMode(rawValue: modeRaw) ?? .wss
+        if transportMode == .xray {
+            guard !xrayShareLink.isEmpty else { return nil }
+        } else {
+            guard !ovpnContent.isEmpty else { return nil }
+        }
         return TunnelConfig(
             host: host,
             port: port,
             path: path,
             ovpnContent: ovpnContent,
+            xrayShareLink: xrayShareLink,
             listenPort: (dictionary["listenPort"] as? Int) ?? 18080,
             verifyServerCert: (dictionary["verifyServerCert"] as? Bool) ?? false,
             linkProtocol: TunnelLinkProtocol(rawValue: (dictionary["linkProtocol"] as? String ?? "").lowercased()) ?? .tcp,

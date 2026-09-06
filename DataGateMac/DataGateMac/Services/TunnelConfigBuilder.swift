@@ -27,6 +27,8 @@ enum TunnelConfigBuildError: LocalizedError {
     case manualServerNotInQuotaPlan(Int)
     case ovpnDownloadFailed(String)
     case ovpnEmpty
+    case xrayDownloadFailed(String)
+    case xrayEmpty
     case invalidApiUrl(String)
 
     var errorDescription: String? {
@@ -49,6 +51,10 @@ enum TunnelConfigBuildError: LocalizedError {
             return L10n.trFormat("vpn_build_err_ovpn_fmt", "Could not download the VPN profile: %@", detail)
         case .ovpnEmpty:
             return L10n.tr("vpn_build_err_ovpn_empty", "The VPN profile from the server was empty.")
+        case .xrayDownloadFailed(let detail):
+            return L10n.trFormat("vpn_build_err_xray_fmt", "Could not download the Xray client link: %@", detail)
+        case .xrayEmpty:
+            return L10n.tr("vpn_build_err_xray_empty", "The Xray client link from the server was empty.")
         case .invalidApiUrl(let url):
             return L10n.trFormat("vpn_build_err_bad_api_url_fmt", "Invalid server API URL: %@", url)
         }
@@ -64,17 +70,19 @@ enum TunnelConfigBuilder {
     static func homeRows(from servers: [OpenVpnServerWithStatusDto]) -> [HomeVpnServerRow] {
         let rows: [HomeVpnServerRow] = servers.compactMap { dto in
             let s = dto.openVpnServerResponses.openVpnServer
-            guard dto.isOpenVpnConnectable else { return nil }
+            guard dto.isConnectable else { return nil }
             let name = s.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
             let display = name.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", s.id) : name
             let clients = max(0, dto.countConnectedClients)
+            let isXray = s.serverType == .xray
             return HomeVpnServerRow(
                 id: s.id,
                 displayName: display,
                 isOnline: s.isOnline ?? false,
                 clientCount: clients,
-                usesWss: s.isEnableWss == true,
-                protocolLabel: s.listedLinkProtocol
+                usesWss: !isXray && s.isEnableWss == true,
+                isXray: isXray,
+                protocolLabel: isXray ? nil : s.listedLinkProtocol
             )
         }
         return rows.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
@@ -86,6 +94,7 @@ enum TunnelConfigBuilder {
         installationIdService: InstallationIdService = InstallationIdService(),
         serversClient: OpenVpnServersApiClient = .shared,
         filesClient: OpenVpnFilesApiClient = .shared,
+        xrayFilesClient: XrayClientLinksApiClient = .shared,
         onLog: ((String) -> Void)? = nil
     ) async throws -> TunnelConfig {
         func step(_ msg: String) {
@@ -117,9 +126,26 @@ enum TunnelConfigBuilder {
         let serverId = server.openVpnServerResponses.openVpnServer.id
         step("[Backend] Step 3: using server id=\(serverId) \(server.openVpnServerResponses.openVpnServer.serverName)")
 
-        let commonName = "mdg-\(serverId)-\(externalId)-\(installationId)"
         let issuedTo = externalId
+        let listenPort = 18080
+        let displayName = server.openVpnServerResponses.openVpnServer.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let serverLabel = displayName.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", serverId) : displayName
 
+        if server.openVpnServerResponses.openVpnServer.serverType == .xray {
+            return try await buildXrayConfig(
+                serverId: serverId,
+                serverLabel: serverLabel,
+                externalId: externalId,
+                installationId: installationId,
+                issuedTo: issuedTo,
+                listenPort: listenPort,
+                token: token,
+                xrayFilesClient: xrayFilesClient,
+                step: step
+            )
+        }
+
+        let commonName = "mdg-\(serverId)-\(externalId)-\(installationId)"
         step("[Backend] Step 4: ensure and download OVPN file (download-by-cn / add-with-token)...")
         let fileResponse: DownloadFileResponse
         do {
@@ -149,9 +175,6 @@ enum TunnelConfigBuilder {
         }
         let usesWss = server.openVpnServerResponses.openVpnServer.isEnableWss == true
         let linkProtocol = TunnelLinkProtocol.fromOvpnConfigContent(originalOvpnContent)
-        let listenPort = 18080
-        let displayName = server.openVpnServerResponses.openVpnServer.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let serverLabel = displayName.isEmpty ? L10n.trFormat("vpn_server_numbered_fmt", "Server #%d", serverId) : displayName
 
         if usesWss {
             let ovpnContent = patchOvpnConfigForLocalBridge(originalOvpnContent, listenPort: listenPort, linkProtocol: .tcp)
@@ -171,6 +194,7 @@ enum TunnelConfigBuilder {
                 port: port,
                 path: proxyPath,
                 ovpnContent: ovpnContent,
+                xrayShareLink: "",
                 listenPort: listenPort,
                 verifyServerCert: false,
                 linkProtocol: linkProtocol,
@@ -197,10 +221,73 @@ enum TunnelConfigBuilder {
             port: remote.port,
             path: "/",
             ovpnContent: originalOvpnContent,
+            xrayShareLink: "",
             listenPort: listenPort,
             verifyServerCert: false,
             linkProtocol: linkProtocol,
             transportMode: .direct,
+            serverDisplayName: serverLabel,
+            serverId: serverId
+        )
+    }
+
+    private static func buildXrayConfig(
+        serverId: Int,
+        serverLabel: String,
+        externalId: String,
+        installationId: String,
+        issuedTo: String,
+        listenPort: Int,
+        token: String,
+        xrayFilesClient: XrayClientLinksApiClient,
+        step: (String) -> Void
+    ) async throws -> TunnelConfig {
+        let commonName = "mdg-xray-\(serverId)-\(externalId)-\(installationId)"
+        step("[Backend] Step 4: ensure and download Xray client link (download-by-cn / add-with-token) CN=\(commonName)...")
+        let fileResponse: DownloadFileResponse
+        do {
+            fileResponse = try await xrayFilesClient.ensureAndDownloadDeviceFile(
+                vpnServerId: serverId,
+                commonName: commonName,
+                externalId: externalId,
+                issuedTo: issuedTo,
+                token: token
+            )
+            step("[Backend] Step 4: Xray client link received (\(fileResponse.content?.count ?? 0) bytes)")
+        } catch {
+            step("[Backend] FAIL: xray ensureAndDownloadDeviceFile - \(error.localizedDescription)")
+            log.error("xray ensureAndDownloadDeviceFile failed: \(String(describing: error))")
+            throw TunnelConfigBuildError.xrayDownloadFailed(error.localizedDescription)
+        }
+
+        guard let content = fileResponse.content, !content.isEmpty else {
+            step("[Backend] FAIL: Xray client link empty")
+            throw TunnelConfigBuildError.xrayEmpty
+        }
+        let rawText = String(data: content, encoding: .utf8) ?? ""
+        guard !rawText.isEmpty else {
+            step("[Backend] FAIL: Xray client link decode empty")
+            throw TunnelConfigBuildError.xrayEmpty
+        }
+        guard let vless = XrayClientLinkParser.extractVlessUri(fromRawContent: rawText) else {
+            step("[Backend] FAIL: Xray payload has no vless:// URI")
+            throw TunnelConfigBuildError.xrayEmpty
+        }
+        guard let remote = XrayClientLinkParser.remote(fromVless: vless) else {
+            step("[Backend] FAIL: could not parse VLESS host/port")
+            throw TunnelConfigBuildError.xrayEmpty
+        }
+        step("[Backend] Step 5: Xray VLESS \(remote.host):\(remote.port)")
+        return TunnelConfig(
+            host: remote.host,
+            port: remote.port,
+            path: "/",
+            ovpnContent: "",
+            xrayShareLink: vless,
+            listenPort: listenPort,
+            verifyServerCert: false,
+            linkProtocol: .tcp,
+            transportMode: .xray,
             serverDisplayName: serverLabel,
             serverId: serverId
         )
@@ -231,8 +318,8 @@ enum TunnelConfigBuilder {
                 onLog("[Backend] FAIL: manual server id=\(serverId) not in list")
                 throw TunnelConfigBuildError.manualServerNotFound(serverId)
             }
-            guard dto.isOpenVpnConnectable else {
-                onLog("[Backend] FAIL: manual server id=\(serverId) not connectable (quota, Xray, or disabled)")
+            guard dto.isConnectable else {
+                onLog("[Backend] FAIL: manual server id=\(serverId) not connectable (quota or disabled)")
                 throw TunnelConfigBuildError.manualServerNotInQuotaPlan(serverId)
             }
             return dto
@@ -242,7 +329,7 @@ enum TunnelConfigBuilder {
     /// Quota-filtered servers, online first, then fewer connected clients, then round-robin vs last auto pick.
     private static func pickBestServerWinStyle(_ servers: [OpenVpnServerWithStatusDto]) -> OpenVpnServerWithStatusDto? {
         var ranked: [OpenVpnServerWithStatusDto] = servers.filter { dto in
-            dto.isOpenVpnConnectable
+            dto.isConnectable
         }
         guard !ranked.isEmpty else { return nil }
 

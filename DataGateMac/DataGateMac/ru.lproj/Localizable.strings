@@ -63,6 +63,8 @@
 "home_server_section" = "VPN-сервер";
 "home_server_section_hint" = "Выберите локацию или автоматический выбор (как в DataGate для Windows и Linux).";
 "home_server_wss_suffix" = " · WSS";
+"home_server_xray_label" = "Xray";
+"home_server_xray_suffix" = " · Xray";
 "home_vpn_hint_blocked" = "Удаляет сохранённый профиль DataGate; затем снова «Подключить» и разрешите запрос. При необходимости удалите DataGate в «Системные настройки» → «VPN».";
 "home_vpn_hint_code14" = "После копирования приложения в «Программы»: сбрасывает профиль, чтобы «Подключить» зарегистрировал туннель снова.";
 "home_vpn_warn_blocked" = "macOS может блокировать обновление VPN-профиля (нет доступа или ошибка 5).";
@@ -80,6 +82,17 @@
 "login_status_starting" = "Запуск входа…";
 "login_subtitle" = "Войдите, чтобы продолжить";
 "login_title" = "DataGate";
+"login_totp_again" = "Войти снова";
+"login_totp_back" = "Назад ко входу";
+"login_totp_expired" = "Этот шаг подтверждения истёк. Войдите снова.";
+"login_totp_lead" = "Введите 6-значный код из приложения-аутентификатора, чтобы завершить вход.";
+"login_totp_lead_named_fmt" = "Вход как %@. Введите 6-значный код из приложения-аутентификатора, чтобы завершить вход.";
+"login_totp_placeholder" = "000000";
+"login_totp_status" = "Нужен код из приложения-аутентификатора.";
+"login_totp_still_required" = "Двухфакторная проверка не завершена. Попробуйте ещё раз.";
+"login_totp_title" = "Двухфакторная аутентификация";
+"login_totp_verify" = "Подтвердить и войти";
+"login_totp_verifying" = "Проверка…";
 "main_logged_in" = "Вход выполнен";
 "nav_access" = "Доступ";
 "nav_home" = "Главная";
@@ -95,6 +108,7 @@
 "oauth_listener_entitlement" = "Не удалось запустить сервер редиректа (нет разрешения). Добавьте entitlement «Incoming Network Connections».";
 "oauth_listener_failed" = "Не удалось запустить OAuth-слушатель.";
 "oauth_no_code" = "Код авторизации не получен.";
+"oauth_no_token" = "Сервер не вернул токен доступа.";
 "oauth_page_brand" = "DataGate";
 "oauth_page_title" = "DataGate";
 "oauth_state_mismatch" = "Проверка state не удалась.";
@@ -176,6 +190,8 @@
 "vpn_build_err_server_no_wss_fmt" = "Сервер №%d не поддерживает транспорт WSS.";
 "vpn_build_err_server_not_found_fmt" = "Сервер №%d не найден или недоступен.";
 "vpn_build_err_server_not_in_plan_fmt" = "Сервер №%d не входит в ваш тарифный план.";
+"vpn_build_err_xray_empty" = "Xray-ссылка с сервера пустая.";
+"vpn_build_err_xray_fmt" = "Не удалось загрузить Xray-ссылку: %@";
 "vpn_err_config_detail_fmt" = "%@ [%@ code %d]";
 "vpn_err_connection_failed_fmt" = "Сбой подключения (%@ код %d)";
 "vpn_err_ne_14" = "Расширение туннеля недоступно (код 14). Установите из «Программы», проверьте entitlements, при необходимости перезагрузите Mac.";

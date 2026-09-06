@@ -301,9 +301,15 @@ final class VpnViewModel: ObservableObject {
 
     private func startTunnelWithConfiguration(_ config: TunnelConfig, allowProfileRecreateRetry: Bool) async throws {
         appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
-        let transport = config.transportMode == .direct
-            ? L10n.tr("home_server_openvpn_label", "OpenVPN")
-            : "WSS"
+        let transport: String
+        switch config.transportMode {
+        case .direct:
+            transport = L10n.tr("home_server_openvpn_label", "OpenVPN")
+        case .xray:
+            transport = L10n.tr("home_server_xray_label", "Xray")
+        case .wss:
+            transport = "WSS"
+        }
         let proto = config.linkProtocol.rawValue.uppercased()
         activeTunnelSummary = "\(config.serverDisplayName) · \(transport) · \(proto) · \(config.host):\(config.port)"
         try await tunnelManager.setConfiguration(config)
