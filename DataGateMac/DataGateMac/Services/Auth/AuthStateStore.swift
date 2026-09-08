@@ -35,6 +35,15 @@ final class AuthStateStore: ObservableObject {
         avatarUrl = ProfileImageURL.normalizedString(UserDefaults.standard.string(forKey: userAvatarUrlKey))
         let storedId = UserDefaults.standard.integer(forKey: userIdKey)
         userId = storedId > 0 ? storedId : nil
+        NotificationCenter.default.addObserver(
+            forName: .authSessionRejected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleSessionRejected()
+            }
+        }
     }
 
     /// Call at app launch: load stored token; if valid, set authorized.
@@ -100,7 +109,29 @@ final class AuthStateStore: ObservableObject {
 
     /// Returns valid access token (refreshes if expired). Used by API clients.
     func getValidAccessToken() async -> String? {
-        await session.getValidAccessToken()
+        let token = await session.getValidAccessToken()
+        if token == nil, let reason = session.lastFailureDescription, reason.contains("refresh rejected") {
+            handleSessionRejected()
+        }
+        return token
+    }
+
+    var lastTokenFailureDescription: String? {
+        session.lastFailureDescription
+    }
+
+    private func handleSessionRejected() {
+        guard isAuthorized else { return }
+        isAuthorized = false
+        displayName = nil
+        email = nil
+        avatarUrl = nil
+        userId = nil
+        UserDefaults.standard.removeObject(forKey: userDisplayNameKey)
+        UserDefaults.standard.removeObject(forKey: userEmailKey)
+        UserDefaults.standard.removeObject(forKey: userAvatarUrlKey)
+        UserDefaults.standard.removeObject(forKey: userIdKey)
+        UserDefaults.standard.removeObject(forKey: mainSidebarNavSelectionKey)
     }
 
     /// User id for `/api/user-quota-plans/...` and similar; falls back to JWT claims when unset.

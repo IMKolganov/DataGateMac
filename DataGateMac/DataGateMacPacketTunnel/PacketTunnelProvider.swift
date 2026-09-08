@@ -91,6 +91,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         let upstreamWss = "wss://\(host):\(port)\(pathNormalized)"
         let serverDisplayName = (providerConfig["serverDisplayName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let serverId = Self.intFromProvider(providerConfig["serverId"])
+        let clientCommonName = (providerConfig["clientCommonName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         log.info("[Ext] Step 1: config mode=\(transportMode) useDirect=\(useDirect) useXray=\(useXray) host=\(host) port=\(port) path=\(pathNormalized) listenPort=\(listenPort) verifyCert=\(verifyServerCert) linkProtocol=\(linkProtocol) hasOvpn=\(hasOvpn) hasXray=\(!xrayShareLink.isEmpty)")
         ExtensionLogWriter.append("[Ext] Step 1: providerConfiguration mode=\(transportMode) useDirect=\(useDirect) useXray=\(useXray) host=\(host) remotePort=\(port) path=\(pathNormalized) linkProtocol=\(linkProtocol) verifyServerCert=\(verifyServerCert)")
@@ -100,6 +101,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             } else {
                 ExtensionLogWriter.append("[Ext] Step 1: backend server label=\(serverDisplayName)")
             }
+        }
+        if !clientCommonName.isEmpty {
+            ExtensionLogWriter.append("[Ext] Step 1: client CN=\(clientCommonName)")
+        }
+        let issuedFileName = (providerConfig["issuedFileName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !issuedFileName.isEmpty {
+            ExtensionLogWriter.append("[Ext] Step 1: issued file=\(issuedFileName)")
         }
 
         guard !host.isEmpty else {
@@ -169,6 +177,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                         runner.injectDataPackets(fromTunnel: [packet], protocols: [NSNumber(value: family)])
                     }
                     flowBridge.startReadLoop()
+                    self.bindTrafficInterface()
                     succeed()
                 }
             }
@@ -249,13 +258,21 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         openVpnRunner = nil
         xrayRunner?.stopXray()
         xrayRunner = nil
+        TunnelTrafficMeter.reset()
         completionHandler()
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        // Optional: app can send messages via connection.sendProviderMessage(_:responseHandler:).
-        // We don't use it for now; status is via NEVPNStatus only.
-        completionHandler?(nil)
+        guard String(data: messageData, encoding: .utf8) == "stats" else {
+            completionHandler?(nil)
+            return
+        }
+        let snap = TunnelTrafficMeter.snapshot() ?? (bytesIn: UInt64(0), bytesOut: UInt64(0))
+        let payload: [String: Any] = [
+            "in": snap.bytesIn,
+            "out": snap.bytesOut,
+        ]
+        completionHandler?(try? JSONSerialization.data(withJSONObject: payload))
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
@@ -365,6 +382,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             runner.injectDataPackets(fromTunnel: [packet], protocols: [NSNumber(value: family)])
         }
         flowBridge.startReadLoop()
+        bindTrafficInterface()
     }
 
     // MARK: - Xray (VLESS via libXray)
@@ -398,6 +416,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             ExtensionLogWriter.append("[Ext] Step 3: packetFlow utun fd=\(tunFd)")
+            TunnelTrafficMeter.bind(utunFd: tunFd)
 
             let runner = XrayRunnerBridge { line in
                 ExtensionLogWriter.append(line)
@@ -529,7 +548,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         return nil
     }
 
-    // MARK: - Private
+    private func bindTrafficInterface() {
+        if let fd = packetFlowSocketFileDescriptor() {
+            TunnelTrafficMeter.bind(utunFd: fd)
+        }
+    }
 
     private func createTunnelNetworkSettings() -> NEPacketTunnelNetworkSettings {
         // Placeholder: a minimal IPv4 setting so the tunnel interface exists.
@@ -541,5 +564,92 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         settings.ipv4Settings = ipv4
         settings.mtu = 1500
         return settings
+    }
+}
+
+/// Device-side utun byte counters for the live Home traffic chart (not backend stats).
+enum TunnelTrafficMeter {
+    private static let lock = NSLock()
+    private static var interfaceName: String?
+
+    static func reset() {
+        lock.lock()
+        interfaceName = nil
+        lock.unlock()
+    }
+
+    static func bind(utunFd fd: Int32) {
+        guard let name = utunInterfaceName(from: fd) else { return }
+        lock.lock()
+        interfaceName = name
+        lock.unlock()
+    }
+
+    static func snapshot() -> (bytesIn: UInt64, bytesOut: UInt64)? {
+        lock.lock()
+        let name = interfaceName
+        lock.unlock()
+        guard let name, let counts = interfaceByteCounts(ifName: name) else {
+            return interfaceByteCountsForAnyUtun()
+        }
+        return counts
+    }
+
+    private static func utunInterfaceName(from fd: Int32) -> String? {
+        var buf = [CChar](repeating: 0, count: 16)
+        var len = socklen_t(buf.count)
+        let rc = buf.withUnsafeMutableBytes { raw -> Int32 in
+            guard let base = raw.baseAddress else { return -1 }
+            return getsockopt(fd, 2, 2, base, &len)
+        }
+        guard rc == 0 else { return nil }
+        let name = String(cString: buf).trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.hasPrefix("utun") ? name : nil
+    }
+
+    private static func interfaceByteCounts(ifName: String) -> (bytesIn: UInt64, bytesOut: UInt64)? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        defer { freeifaddrs(ifaddr) }
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = ptr {
+            let name = String(cString: current.pointee.ifa_name)
+            if name == ifName,
+               let addr = current.pointee.ifa_addr,
+               addr.pointee.sa_family == UInt8(AF_LINK),
+               let data = current.pointee.ifa_data {
+                let stats = data.assumingMemoryBound(to: if_data.self).pointee
+                return (UInt64(stats.ifi_ibytes), UInt64(stats.ifi_obytes))
+            }
+            ptr = current.pointee.ifa_next
+        }
+        return nil
+    }
+
+    private static func interfaceByteCountsForAnyUtun() -> (bytesIn: UInt64, bytesOut: UInt64)? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        defer { freeifaddrs(ifaddr) }
+        var best: (bytesIn: UInt64, bytesOut: UInt64)?
+        var bestTotal: UInt64 = 0
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = ptr {
+            let name = String(cString: current.pointee.ifa_name)
+            if name.hasPrefix("utun"),
+               let addr = current.pointee.ifa_addr,
+               addr.pointee.sa_family == UInt8(AF_LINK),
+               let data = current.pointee.ifa_data {
+                let stats = data.assumingMemoryBound(to: if_data.self).pointee
+                let inn = UInt64(stats.ifi_ibytes)
+                let out = UInt64(stats.ifi_obytes)
+                let total = inn &+ out
+                if total >= bestTotal {
+                    bestTotal = total
+                    best = (inn, out)
+                }
+            }
+            ptr = current.pointee.ifa_next
+        }
+        return best
     }
 }

@@ -37,21 +37,10 @@ struct AuthTokensResponse: Codable {
     }
 
     private static func decodeDate(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Date {
-        if let str = try? container.decode(String.self, forKey: key) {
-            return ISO8601DateFormatter().date(from: str) ?? ISO8601DateFormatter().date(from: str.replacingOccurrences(of: "Z", with: "+00:00")) ?? Date()
-        }
-        let secs = try container.decode(Double.self, forKey: key)
-        return Date(timeIntervalSince1970: secs)
+        try AuthJSONDate.decode(container, forKey: key)
     }
 
     private static func decodeDateIfPresent(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Date? {
-        guard container.contains(key) else { return nil }
-        if let str = try? container.decode(String.self, forKey: key) {
-            return ISO8601DateFormatter().date(from: str) ?? ISO8601DateFormatter().date(from: str.replacingOccurrences(of: "Z", with: "+00:00"))
-        }
-        if let secs = try? container.decode(Double.self, forKey: key) {
-            return Date(timeIntervalSince1970: secs)
-        }
-        return nil
+        try AuthJSONDate.decodeIfPresent(container, forKey: key)
     }
 }

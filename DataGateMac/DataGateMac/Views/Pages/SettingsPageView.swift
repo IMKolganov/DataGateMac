@@ -25,13 +25,10 @@ struct SettingsPageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text(L10n.tr("settings_title", "Settings"))
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                IconSectionTitle(title: L10n.tr("settings_title", "Settings"), systemImage: "gearshape.fill", style: .page)
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(L10n.tr("settings_language", "Language"))
-                        .font(.headline)
+                    IconSectionTitle(title: L10n.tr("settings_language", "Language"), systemImage: "globe")
                     Text(L10n.tr("settings_language_hint", "Choose the interface language. \"Follow system language\" uses macOS settings."))
                         .foregroundStyle(.secondary)
                     HStack {
@@ -43,8 +40,7 @@ struct SettingsPageView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(L10n.tr("settings_appearance", "Appearance"))
-                        .font(.headline)
+                    IconSectionTitle(title: L10n.tr("settings_appearance", "Appearance"), systemImage: "circle.lefthalf.filled")
                     Text(L10n.tr("settings_appearance_hint", "Choose the application theme."))
                         .foregroundStyle(.secondary)
                     Picker(L10n.tr("settings_theme", "Theme"), selection: appearance) {
@@ -58,8 +54,7 @@ struct SettingsPageView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(L10n.tr("settings_account", "Account"))
-                        .font(.headline)
+                    IconSectionTitle(title: L10n.tr("settings_account", "Account"), systemImage: "person.crop.circle")
                     Text(L10n.tr("settings_account_hint", "Sign out from the application."))
                         .foregroundStyle(.secondary)
                     Button {
@@ -73,8 +68,7 @@ struct SettingsPageView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.tr("settings_application", "Application"))
-                        .font(.headline)
+                    IconSectionTitle(title: L10n.tr("settings_application", "Application"), systemImage: "app.badge")
                     Text(String(format: L10n.tr("settings_version_fmt", "Current version: %@"), locale: L10n.activeLocaleForFormatting(), versionString))
                         .foregroundStyle(.secondary)
                 }
@@ -82,8 +76,7 @@ struct SettingsPageView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(L10n.tr("settings_updates_title", "Updates"))
-                        .font(.headline)
+                    IconSectionTitle(title: L10n.tr("settings_updates_title", "Updates"), systemImage: "arrow.down.app")
                     Text(L10n.tr("settings_updates_hint", "Check GitHub releases for a newer version of DataGate Mac."))
                         .foregroundStyle(.secondary)
 

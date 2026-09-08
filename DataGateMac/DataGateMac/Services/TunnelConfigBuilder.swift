@@ -146,7 +146,7 @@ enum TunnelConfigBuilder {
         }
 
         let commonName = "mdg-\(serverId)-\(externalId)-\(installationId)"
-        step("[Backend] Step 4: ensure and download OVPN file (download-by-cn / add-with-token)...")
+        step("[Backend] Step 4: ensure and download OVPN file (download-by-cn / add-with-token) CN=\(commonName)...")
         let fileResponse: DownloadFileResponse
         do {
             fileResponse = try await filesClient.ensureAndDownloadDeviceFile(
@@ -173,6 +173,13 @@ enum TunnelConfigBuilder {
             step("[Backend] FAIL: OVPN content decode empty")
             throw TunnelConfigBuildError.ovpnEmpty
         }
+        let identity = IssuedClientIdentity.resolve(
+            response: fileResponse,
+            fallbackCommonName: commonName,
+            ovpnContent: originalOvpnContent,
+            isXray: false
+        )
+        step("[Backend] Step 4: client CN=\(identity.commonName) file=\(identity.fileName ?? "-")")
         let usesWss = server.openVpnServerResponses.openVpnServer.isEnableWss == true
         let linkProtocol = TunnelLinkProtocol.fromOvpnConfigContent(originalOvpnContent)
 
@@ -200,7 +207,9 @@ enum TunnelConfigBuilder {
                 linkProtocol: linkProtocol,
                 transportMode: .wss,
                 serverDisplayName: serverLabel,
-                serverId: serverId
+                serverId: serverId,
+                clientCommonName: identity.commonName,
+                issuedFileName: identity.fileName
             )
         }
 
@@ -227,7 +236,9 @@ enum TunnelConfigBuilder {
             linkProtocol: linkProtocol,
             transportMode: .direct,
             serverDisplayName: serverLabel,
-            serverId: serverId
+            serverId: serverId,
+            clientCommonName: identity.commonName,
+            issuedFileName: identity.fileName
         )
     }
 
@@ -277,7 +288,13 @@ enum TunnelConfigBuilder {
             step("[Backend] FAIL: could not parse VLESS host/port")
             throw TunnelConfigBuildError.xrayEmpty
         }
-        step("[Backend] Step 5: Xray VLESS \(remote.host):\(remote.port)")
+        let identity = IssuedClientIdentity.resolve(
+            response: fileResponse,
+            fallbackCommonName: commonName,
+            ovpnContent: rawText,
+            isXray: true
+        )
+        step("[Backend] Step 5: Xray VLESS \(remote.host):\(remote.port) CN=\(identity.commonName) file=\(identity.fileName ?? "-")")
         return TunnelConfig(
             host: remote.host,
             port: remote.port,
@@ -289,7 +306,9 @@ enum TunnelConfigBuilder {
             linkProtocol: .tcp,
             transportMode: .xray,
             serverDisplayName: serverLabel,
-            serverId: serverId
+            serverId: serverId,
+            clientCommonName: identity.commonName,
+            issuedFileName: identity.fileName
         )
     }
 

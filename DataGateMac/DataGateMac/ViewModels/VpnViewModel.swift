@@ -17,6 +17,7 @@ final class VpnViewModel: ObservableObject {
         case tunnelBuild(TunnelConfigBuildError)
         case manualProfileMissing
         case manualProfileInvalid(String)
+        case cancelled
 
         var errorDescription: String? {
             switch self {
@@ -30,6 +31,8 @@ final class VpnViewModel: ObservableObject {
                 return L10n.tr("profiles_err_missing", "That local profile is no longer on disk.")
             case .manualProfileInvalid(let detail):
                 return detail
+            case .cancelled:
+                return nil
             }
         }
     }
@@ -42,6 +45,12 @@ final class VpnViewModel: ObservableObject {
     private enum TunnelSessionPrefs {
         static let summaryKey = "imkolganov.DataGateMac.lastTunnelSummary"
         static let manualProfileIdKey = "imkolganov.DataGateMac.connectedManualProfileId"
+        static let commonNameKey = "imkolganov.DataGateMac.lastTunnelClientCommonName"
+        static let issuedFileNameKey = "imkolganov.DataGateMac.lastTunnelIssuedFileName"
+        static let serverNameKey = "imkolganov.DataGateMac.lastTunnelServerName"
+        static let transportKey = "imkolganov.DataGateMac.lastTunnelTransport"
+        static let protoKey = "imkolganov.DataGateMac.lastTunnelProto"
+        static let endpointKey = "imkolganov.DataGateMac.lastTunnelEndpoint"
     }
 
     @Published var isConnected: Bool = false
@@ -50,6 +59,14 @@ final class VpnViewModel: ObservableObject {
     @Published var statusText: String = L10n.tr("vpn_status_disconnected", "Disconnected")
     /// Set when a backend tunnel config is applied (server label + WSS endpoint). Cleared when the tunnel is disconnected.
     @Published var activeTunnelSummary: String = ""
+    @Published var activeServerName: String = ""
+    @Published var activeTransport: String = ""
+    @Published var activeProto: String = ""
+    @Published var activeEndpoint: String = ""
+    /// Device CN issued for this backend OpenVPN / Xray client. Empty for local profiles.
+    @Published var activeClientCommonName: String = ""
+    /// Issued OVPN / client-link file name from the backend, when available.
+    @Published var activeIssuedFileName: String = ""
     @Published var logText: String = ""
     /// Log lines written by the packet tunnel extension (read from App Group shared file); polled every second.
     @Published var extensionLogText: String = ""
@@ -68,10 +85,19 @@ final class VpnViewModel: ObservableObject {
     @Published var connectedManualProfileId: UUID?
     /// Last connect failure for a local profile, shown on the Profiles list.
     @Published var lastManualConnectErrorById: [UUID: String] = [:]
+    @Published var liveTrafficSamples: [LiveTrafficSample] = []
+    @Published var liveBytesIn: UInt64 = 0
+    @Published var liveBytesOut: UInt64 = 0
+    @Published var liveDownBytesPerSec: Double = 0
+    @Published var liveUpBytesPerSec: Double = 0
 
     private let tunnelManager = VpnTunnelManager()
     private let manualProfileStore: ManualVpnProfileStore
     private var extensionLogPollTimer: Timer?
+    private var liveTrafficPollTimer: Timer?
+    private var lastLiveBytesIn: UInt64?
+    private var lastLiveBytesOut: UInt64?
+    private var lastLiveTrafficAt: Date?
     private var cancellables = Set<AnyCancellable>()
     /// Reading the shared App Group container from the host app triggers
     /// macOS "access data from other apps" prompts on some systems.
@@ -81,6 +107,8 @@ final class VpnViewModel: ObservableObject {
     private var isPreparing: Bool = false
     /// True from Connect tap until startTunnel() has been called (or failed). Prevents multiple connect taps.
     private var connectInProgress: Bool = false
+    /// Bumped on each Connect/Disconnect so an in-flight connect cannot restart the tunnel after cancel.
+    private var connectGeneration: Int = 0
     private var previousTunnelStatus: NEVPNStatus = .invalid
     private var hasLoggedVpnDiagnostics: Bool = false
     private var hasLoadedTunnelConfiguration = false
@@ -119,6 +147,7 @@ final class VpnViewModel: ObservableObject {
 
     deinit {
         extensionLogPollTimer?.invalidate()
+        liveTrafficPollTimer?.invalidate()
         if let o = languageChangeObserver {
             NotificationCenter.default.removeObserver(o)
         }
@@ -175,9 +204,14 @@ final class VpnViewModel: ObservableObject {
         return true
     }
 
-    /// Disconnect when connected or reasserting; disabled while connecting/disconnecting or other busy work.
+    /// Disconnect when connected, reconnecting, still connecting, or while a connect attempt is in progress (cancel, including sysex activation).
     var canTapDisconnect: Bool {
-        !isBusy && (tunnelManager.status == .connected || tunnelManager.status == .reasserting)
+        !isPreparing && (
+            connectInProgress
+            || tunnelManager.status == .connected
+            || tunnelManager.status == .reasserting
+            || tunnelManager.status == .connecting
+        )
     }
 
     /// Call once when the UI appears so the tunnel config is ready for Connect.
@@ -264,20 +298,20 @@ final class VpnViewModel: ObservableObject {
     }
 
     func connect() {
-        if connectInProgress {
-            return
-        }
         ignoreTunnelSessionRestore = false
-        connectInProgress = true
+        connectedManualProfileId = nil
+        let generation = beginConnectAttempt()
         isBusy = true
         statusText = L10n.tr("vpn_status_connecting", "Connecting...")
         extensionLogText = ""
         appendLog("[Connect flow] Connect tapped: starting...")
 
         Task { @MainActor in
-            defer { connectInProgress = false; syncFromTunnel() }
+            defer { endConnectAttempt(generation) }
             do {
-                try await runConnectFlow(allowProfileRecreateRetry: true)
+                try await runConnectFlow(generation: generation, allowProfileRecreateRetry: true)
+            } catch ConnectFlowError.cancelled {
+                appendLog("[Connect flow] Connect cancelled.")
             } catch let flow as ConnectFlowError {
                 clearTunnelSession()
                 appendLog("[Connect flow] FAIL: \(flow.errorDescription ?? "Unknown error")")
@@ -296,23 +330,25 @@ final class VpnViewModel: ObservableObject {
 
     /// Starts the tunnel from a locally imported profile. Does not call the backend or require quota.
     func connectManualProfile(id: UUID) {
-        if connectInProgress {
-            return
-        }
         ignoreTunnelSessionRestore = false
-        connectInProgress = true
+        connectedManualProfileId = id
+        clearManualConnectError(id: id)
+        let generation = beginConnectAttempt()
         isBusy = true
         statusText = L10n.tr("vpn_status_connecting", "Connecting...")
         extensionLogText = ""
         appendLog("[Connect flow] Local profile Connect tapped: starting...")
 
         Task { @MainActor in
-            defer { connectInProgress = false; syncFromTunnel() }
+            defer { endConnectAttempt(generation) }
             do {
-                try await runManualConnectFlow(profileId: id, allowProfileRecreateRetry: true)
+                try await runManualConnectFlow(profileId: id, generation: generation, allowProfileRecreateRetry: true)
+                guard generation == connectGeneration else { return }
                 var errors = lastManualConnectErrorById
                 errors.removeValue(forKey: id)
                 lastManualConnectErrorById = errors
+            } catch ConnectFlowError.cancelled {
+                appendLog("[Connect flow] Local profile Connect cancelled.")
             } catch let flow as ConnectFlowError {
                 recordManualConnectError(id: id, message: flow.errorDescription ?? "Unknown error")
                 clearTunnelSession()
@@ -337,7 +373,11 @@ final class VpnViewModel: ObservableObject {
     }
 
     func isManualProfileConnected(_ id: UUID) -> Bool {
-        connectedManualProfileId == id && (tunnelManager.isConnectingOrConnected || tunnelManager.status == .disconnecting)
+        connectedManualProfileId == id && (
+            connectInProgress
+            || tunnelManager.isConnectingOrConnected
+            || tunnelManager.status == .disconnecting
+        )
     }
 
     func noteRenamedManualProfile(id: UUID, displayName: String) {
@@ -351,6 +391,82 @@ final class VpnViewModel: ObservableObject {
         return lines.suffix(8).joined(separator: "\n")
     }
 
+    var connectionIdentityRows: [TunnelSessionIdentityRow] {
+        var rows: [TunnelSessionIdentityRow] = []
+        let server = activeServerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !server.isEmpty {
+            rows.append(TunnelSessionIdentityRow(
+                id: "server",
+                label: L10n.tr("home_identity_server", "Server"),
+                value: server
+            ))
+        }
+        let protocolValue = [activeTransport, activeProto]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        if !protocolValue.isEmpty {
+            rows.append(TunnelSessionIdentityRow(
+                id: "protocol",
+                label: L10n.tr("home_identity_protocol", "Protocol"),
+                value: protocolValue
+            ))
+        }
+        let endpoint = activeEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !endpoint.isEmpty {
+            rows.append(TunnelSessionIdentityRow(
+                id: "address",
+                label: L10n.tr("home_identity_address", "Address"),
+                value: endpoint,
+                usesMonospace: true
+            ))
+        }
+        let cn = activeClientCommonName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cn.isEmpty {
+            rows.append(TunnelSessionIdentityRow(
+                id: "cn",
+                label: L10n.tr("home_identity_cn", "CN"),
+                value: cn,
+                usesMonospace: true
+            ))
+        }
+        if rows.isEmpty {
+            let fallback = activeTunnelSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fallback.isEmpty {
+                rows.append(TunnelSessionIdentityRow(
+                    id: "summary",
+                    label: L10n.tr("home_identity_server", "Server"),
+                    value: fallback
+                ))
+            }
+        }
+        return rows
+    }
+
+    func clearManualConnectError(id: UUID) {
+        var errors = lastManualConnectErrorById
+        errors.removeValue(forKey: id)
+        lastManualConnectErrorById = errors
+    }
+
+    private func beginConnectAttempt() -> Int {
+        connectGeneration += 1
+        connectInProgress = true
+        return connectGeneration
+    }
+
+    private func endConnectAttempt(_ generation: Int) {
+        guard generation == connectGeneration else { return }
+        connectInProgress = false
+        syncFromTunnel()
+    }
+
+    private func throwIfConnectCancelled(_ generation: Int) throws {
+        if generation != connectGeneration {
+            throw ConnectFlowError.cancelled
+        }
+    }
+
     private func recordManualConnectError(id: UUID, message: String) {
         var errors = lastManualConnectErrorById
         errors[id] = message
@@ -358,16 +474,29 @@ final class VpnViewModel: ObservableObject {
     }
 
     /// Loads config, activates sysex, applies backend settings, starts tunnel; recreates VPN profile once on code 14.
-    private func runConnectFlow(allowProfileRecreateRetry: Bool) async throws {
+    private func runConnectFlow(generation: Int, allowProfileRecreateRetry: Bool) async throws {
         await stopTunnelIfNeededForSwitch()
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1: loadOrCreateConfiguration...")
         try await tunnelManager.loadOrCreateConfiguration()
         hasLoadedTunnelConfiguration = true
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1b: activate packet tunnel system extension...")
         try await SystemExtensionInstaller.activateIfNeeded()
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1b: system extension activation OK.")
         let config: TunnelConfig
-        if let auth = authState, let token = await auth.getValidAccessToken() {
+        if let auth = authState {
+            guard let token = await auth.getValidAccessToken() else {
+                let reason = auth.lastTokenFailureDescription
+                if let reason, !reason.isEmpty {
+                    appendLog("[Connect flow] Step 2 FAIL: no valid auth token (\(reason)).")
+                } else {
+                    appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
+                }
+                throw ConnectFlowError.unauthorized
+            }
+            try throwIfConnectCancelled(generation)
             appendLog("[Connect flow] Step 2: build config from backend (TunnelConfigBuilder)...")
             let pick: TunnelServerPick = serverPickAutomatic
                 ? .automatic
@@ -390,18 +519,22 @@ final class VpnViewModel: ObservableObject {
             appendLog("[Connect flow] Step 2 FAIL: no valid auth token.")
             throw ConnectFlowError.unauthorized
         }
-        try await startTunnelWithConfiguration(config, allowProfileRecreateRetry: allowProfileRecreateRetry)
+        try throwIfConnectCancelled(generation)
+        try await startTunnelWithConfiguration(config, generation: generation, allowProfileRecreateRetry: allowProfileRecreateRetry)
         showVpnProfileResetSuggestion = false
         showVpnProfileResetAlert = false
     }
 
-    private func runManualConnectFlow(profileId: UUID, allowProfileRecreateRetry: Bool) async throws {
+    private func runManualConnectFlow(profileId: UUID, generation: Int, allowProfileRecreateRetry: Bool) async throws {
         await stopTunnelIfNeededForSwitch()
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1: loadOrCreateConfiguration...")
         try await tunnelManager.loadOrCreateConfiguration()
         hasLoadedTunnelConfiguration = true
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1b: activate packet tunnel system extension...")
         try await SystemExtensionInstaller.activateIfNeeded()
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 1b: system extension activation OK.")
         let profile: ManualVpnProfile
         do {
@@ -417,7 +550,8 @@ final class VpnViewModel: ObservableObject {
             throw ConnectFlowError.manualProfileInvalid(error.localizedDescription)
         }
         appendLog("[Connect flow] Step 2: local endpoint \(config.host):\(config.port)")
-        try await startTunnelWithConfiguration(config, allowProfileRecreateRetry: allowProfileRecreateRetry)
+        try throwIfConnectCancelled(generation)
+        try await startTunnelWithConfiguration(config, generation: generation, allowProfileRecreateRetry: allowProfileRecreateRetry)
         showVpnProfileResetSuggestion = false
         showVpnProfileResetAlert = false
     }
@@ -435,15 +569,19 @@ final class VpnViewModel: ObservableObject {
         }
     }
 
-    private func startTunnelWithConfiguration(_ config: TunnelConfig, allowProfileRecreateRetry: Bool) async throws {
+    private func startTunnelWithConfiguration(_ config: TunnelConfig, generation: Int, allowProfileRecreateRetry: Bool) async throws {
+        try throwIfConnectCancelled(generation)
         appendLog("[Connect flow] Step 3: setConfiguration(if changed) + reload + startTunnel...")
         applyTunnelSession(from: config)
         try await tunnelManager.setConfiguration(config)
+        try throwIfConnectCancelled(generation)
         try await tunnelManager.reloadFromPreferences()
+        try throwIfConnectCancelled(generation)
         try tunnelManager.startTunnel()
         appendLog("[Connect flow] Step 3: start requested; wait for status (Connecting -> Connected).")
 
         let outcome = await tunnelManager.waitForConnectOutcome(timeout: 3.0)
+        try throwIfConnectCancelled(generation)
         if outcome == .connected {
             appendLog("[Connect flow] Step 3: tunnel connected.")
             return
@@ -451,6 +589,7 @@ final class VpnViewModel: ObservableObject {
         guard allowProfileRecreateRetry else { return }
 
         let disconnectError = await tunnelManager.fetchLastDisconnectError()
+        try throwIfConnectCancelled(generation)
         let ns = disconnectError as NSError?
         let shouldRetry = VpnProfileMigrationPolicy.shouldRetryConnectAfterCode14(
             tunnelDisconnected: outcome == .disconnected,
@@ -462,8 +601,10 @@ final class VpnViewModel: ObservableObject {
 
         appendLog("[Connect flow] Code 14 detected — recreating VPN profile and retrying Connect once...")
         try await tunnelManager.recreateDataGateProfile(reason: "code 14 after startVPNTunnel")
+        try throwIfConnectCancelled(generation)
         try await tunnelManager.setConfiguration(config)
         try await tunnelManager.reloadFromPreferences()
+        try throwIfConnectCancelled(generation)
         try tunnelManager.startTunnel()
         appendLog("[Connect flow] Step 3 (retry): start requested after profile recreate.")
     }
@@ -483,6 +624,8 @@ final class VpnViewModel: ObservableObject {
 
     func disconnect() {
         appendLog("[Connect flow] Disconnect tapped.")
+        connectGeneration += 1
+        connectInProgress = false
         ignoreTunnelSessionRestore = true
         clearTunnelSession()
         tunnelManager.stopTunnel()
@@ -517,6 +660,11 @@ final class VpnViewModel: ObservableObject {
             statusText += " (\(err))"
         }
         isConnected = tunnelManager.isConnected
+        if isConnected || current == .reasserting {
+            startLiveTrafficPolling()
+        } else {
+            stopLiveTrafficPolling()
+        }
         // Do not treat `.connected` (or `.reasserting`) as "busy" for the main button — user must be able to Disconnect.
         isBusy = connectInProgress
             || isPreparing
@@ -553,40 +701,135 @@ final class VpnViewModel: ObservableObject {
             ? ""
             : L10n.tr("profiles_local_prefix", "Local") + " · "
         persistTunnelSession(
-            summary: "\(localPrefix)\(config.serverDisplayName) · \(transport) · \(proto) · \(config.host):\(config.port)",
-            manualProfileId: config.manualProfileId
+            serverName: "\(localPrefix)\(config.serverDisplayName)",
+            transport: transport,
+            proto: proto,
+            endpoint: "\(config.host):\(config.port)",
+            manualProfileId: config.manualProfileId,
+            clientCommonName: config.clientCommonName,
+            issuedFileName: config.issuedFileName
         )
     }
 
-    private func persistTunnelSession(summary: String, manualProfileId: String?) {
-        activeTunnelSummary = summary
+    private func persistTunnelSession(
+        serverName: String,
+        transport: String,
+        proto: String,
+        endpoint: String,
+        manualProfileId: String?,
+        clientCommonName: String?,
+        issuedFileName: String?
+    ) {
+        let server = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let transportValue = transport.trimmingCharacters(in: .whitespacesAndNewlines)
+        let protoValue = proto.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpointValue = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cn = clientCommonName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let file = issuedFileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        activeServerName = server
+        activeTransport = transportValue
+        activeProto = protoValue
+        activeEndpoint = endpointValue
+        activeClientCommonName = cn
+        activeIssuedFileName = file
+        activeTunnelSummary = [server, transportValue, protoValue, endpointValue]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
         if let manualProfileId, let uuid = UUID(uuidString: manualProfileId) {
             connectedManualProfileId = uuid
         } else {
             connectedManualProfileId = nil
         }
-        UserDefaults.standard.set(summary, forKey: TunnelSessionPrefs.summaryKey)
+        let defaults = UserDefaults.standard
+        defaults.set(activeTunnelSummary, forKey: TunnelSessionPrefs.summaryKey)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.serverNameKey, value: server)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.transportKey, value: transportValue)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.protoKey, value: protoValue)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.endpointKey, value: endpointValue)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.commonNameKey, value: cn)
+        Self.setOptionalDefault(defaults, key: TunnelSessionPrefs.issuedFileNameKey, value: file)
         if let connectedManualProfileId {
-            UserDefaults.standard.set(connectedManualProfileId.uuidString, forKey: TunnelSessionPrefs.manualProfileIdKey)
+            defaults.set(connectedManualProfileId.uuidString, forKey: TunnelSessionPrefs.manualProfileIdKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: TunnelSessionPrefs.manualProfileIdKey)
+            defaults.removeObject(forKey: TunnelSessionPrefs.manualProfileIdKey)
+        }
+    }
+
+    private static func setOptionalDefault(_ defaults: UserDefaults, key: String, value: String) {
+        if value.isEmpty {
+            defaults.removeObject(forKey: key)
+        } else {
+            defaults.set(value, forKey: key)
         }
     }
 
     private func restoreTunnelSessionFromDefaults() {
-        activeTunnelSummary = UserDefaults.standard.string(forKey: TunnelSessionPrefs.summaryKey) ?? ""
-        if let raw = UserDefaults.standard.string(forKey: TunnelSessionPrefs.manualProfileIdKey) {
+        let defaults = UserDefaults.standard
+        activeTunnelSummary = defaults.string(forKey: TunnelSessionPrefs.summaryKey) ?? ""
+        activeServerName = defaults.string(forKey: TunnelSessionPrefs.serverNameKey) ?? ""
+        activeTransport = defaults.string(forKey: TunnelSessionPrefs.transportKey) ?? ""
+        activeProto = defaults.string(forKey: TunnelSessionPrefs.protoKey) ?? ""
+        activeEndpoint = defaults.string(forKey: TunnelSessionPrefs.endpointKey) ?? ""
+        activeClientCommonName = defaults.string(forKey: TunnelSessionPrefs.commonNameKey) ?? ""
+        activeIssuedFileName = defaults.string(forKey: TunnelSessionPrefs.issuedFileNameKey) ?? ""
+        if activeServerName.isEmpty, activeEndpoint.isEmpty, !activeTunnelSummary.isEmpty {
+            let parsed = Self.parsedIdentity(fromSummary: activeTunnelSummary)
+            activeServerName = parsed.server
+            activeTransport = parsed.transport
+            activeProto = parsed.proto
+            activeEndpoint = parsed.endpoint
+        }
+        if let raw = defaults.string(forKey: TunnelSessionPrefs.manualProfileIdKey) {
             connectedManualProfileId = UUID(uuidString: raw)
         } else {
             connectedManualProfileId = nil
         }
     }
 
+    private static func parsedIdentity(fromSummary summary: String) -> (server: String, transport: String, proto: String, endpoint: String) {
+        let parts = summary
+            .components(separatedBy: " · ")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { part in
+                let lower = part.lowercased()
+                if lower.hasPrefix("cn:") { return false }
+                if lower.hasPrefix("file:") { return false }
+                if part.hasPrefix("Файл:") { return false }
+                return true
+            }
+        switch parts.count {
+        case 0:
+            return ("", "", "", "")
+        case 1:
+            return (parts[0], "", "", "")
+        case 2:
+            return (parts[0], parts[1], "", "")
+        case 3:
+            return (parts[0], parts[1], parts[2], "")
+        default:
+            return (parts[0], parts[1], parts[2], parts.dropFirst(3).joined(separator: " · "))
+        }
+    }
+
     private func clearTunnelSession() {
         activeTunnelSummary = ""
+        activeServerName = ""
+        activeTransport = ""
+        activeProto = ""
+        activeEndpoint = ""
+        activeClientCommonName = ""
+        activeIssuedFileName = ""
         connectedManualProfileId = nil
-        UserDefaults.standard.removeObject(forKey: TunnelSessionPrefs.summaryKey)
-        UserDefaults.standard.removeObject(forKey: TunnelSessionPrefs.manualProfileIdKey)
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: TunnelSessionPrefs.summaryKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.serverNameKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.transportKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.protoKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.endpointKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.commonNameKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.issuedFileNameKey)
+        defaults.removeObject(forKey: TunnelSessionPrefs.manualProfileIdKey)
     }
 
     func dismissVpnProfileResetAlertOnly() {
@@ -598,8 +841,77 @@ final class VpnViewModel: ObservableObject {
         showVpnProfileResetAlert = false
     }
 
+    private func startLiveTrafficPolling() {
+        guard liveTrafficPollTimer == nil else { return }
+        liveTrafficPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.pollLiveTraffic()
+            }
+        }
+        if let liveTrafficPollTimer {
+            RunLoop.main.add(liveTrafficPollTimer, forMode: .common)
+        }
+        Task { @MainActor in
+            await pollLiveTraffic()
+        }
+    }
+
+    private func stopLiveTrafficPolling() {
+        liveTrafficPollTimer?.invalidate()
+        liveTrafficPollTimer = nil
+        lastLiveBytesIn = nil
+        lastLiveBytesOut = nil
+        lastLiveTrafficAt = nil
+        liveTrafficSamples = []
+        liveBytesIn = 0
+        liveBytesOut = 0
+        liveDownBytesPerSec = 0
+        liveUpBytesPerSec = 0
+    }
+
+    private func pollLiveTraffic() async {
+        guard isConnected || tunnelManager.status == .reasserting else { return }
+        guard let snap = await tunnelManager.fetchLiveTraffic() else { return }
+        let now = Date()
+        if let lastIn = lastLiveBytesIn, let lastOut = lastLiveBytesOut, let lastAt = lastLiveTrafficAt {
+            let dt = now.timeIntervalSince(lastAt)
+            if dt > 0, snap.bytesIn >= lastIn, snap.bytesOut >= lastOut {
+                liveDownBytesPerSec = Double(snap.bytesIn - lastIn) / dt
+                liveUpBytesPerSec = Double(snap.bytesOut - lastOut) / dt
+                liveTrafficSamples.append(
+                    LiveTrafficSample(at: now, downBytesPerSec: liveDownBytesPerSec, upBytesPerSec: liveUpBytesPerSec)
+                )
+                if liveTrafficSamples.count > 60 {
+                    liveTrafficSamples.removeFirst(liveTrafficSamples.count - 60)
+                }
+            }
+        }
+        lastLiveBytesIn = snap.bytesIn
+        lastLiveBytesOut = snap.bytesOut
+        lastLiveTrafficAt = now
+        liveBytesIn = snap.bytesIn
+        liveBytesOut = snap.bytesOut
+    }
+
     private func appendLog(_ line: String) {
         let ts = ISO8601DateFormatter().string(from: Date())
         logText += "[\(ts)] \(line)\n"
+        if logText.count > 40_000 {
+            logText = String(logText.suffix(20_000))
+        }
     }
+}
+
+struct TunnelSessionIdentityRow: Identifiable, Equatable, Sendable {
+    let id: String
+    let label: String
+    let value: String
+    var usesMonospace: Bool = false
+}
+
+struct LiveTrafficSample: Identifiable, Equatable, Sendable {
+    let at: Date
+    let downBytesPerSec: Double
+    let upBytesPerSec: Double
+    var id: Date { at }
 }

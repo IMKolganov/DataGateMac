@@ -25,14 +25,7 @@ struct ManualProfilesPageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.tr("profiles_title", "Profiles"))
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text(L10n.tr("profiles_subtitle", "Import an OpenVPN .ovpn file or a VLESS link and connect without using DataGate servers."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                IconSectionTitle(title: L10n.tr("profiles_title", "Profiles"), systemImage: "list.bullet.rectangle.fill", style: .page)
                 Spacer()
                 Button {
                     showAddSheet = true
@@ -41,6 +34,9 @@ struct ManualProfilesPageView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+            Text(L10n.tr("profiles_subtitle", "Import an OpenVPN .ovpn file or a VLESS link and connect without using DataGate servers."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             if let loadError {
                 Label(loadError, systemImage: "exclamationmark.triangle")
@@ -76,12 +72,12 @@ struct ManualProfilesPageView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             AddManualProfileSheet(existing: nil) { draft in
-                saveDraft(draft, replacing: nil)
+                try saveDraft(draft, replacing: nil)
             }
         }
         .sheet(item: $profilePendingEdit) { profile in
             AddManualProfileSheet(existing: profile) { draft in
-                saveDraft(draft, replacing: profile)
+                try saveDraft(draft, replacing: profile)
             }
         }
         .alert(
@@ -126,14 +122,10 @@ struct ManualProfilesPageView: View {
 
     private var statusCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.tr("home_conn_status", "Connection status"))
-                .fontWeight(.semibold)
+            IconSectionTitle(title: L10n.tr("home_conn_status", "Connection status"), systemImage: "checkmark.shield.fill")
             Text(vm.statusText)
                 .foregroundStyle(.secondary)
-            if !vm.activeTunnelSummary.isEmpty {
-                Text(vm.activeTunnelSummary)
-                    .font(.callout)
-            }
+            TunnelSessionIdentityList(rows: vm.connectionIdentityRows)
             if !vm.recentConnectLogExcerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(vm.recentConnectLogExcerpt)
                     .font(.system(.caption2, design: .monospaced))
@@ -156,16 +148,9 @@ struct ManualProfilesPageView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.tr("profiles_empty", "No local profiles yet."))
-                .font(.headline)
-            Text(L10n.tr("profiles_empty_hint", "Paste a vless:// link, JSON with vless / vlessXhttp, or an OpenVPN client profile. You can also drop a file here."))
+            IconSectionTitle(title: L10n.tr("profiles_empty", "No local profiles yet."), systemImage: "tray")
+            Text(L10n.tr("profiles_empty_hint", "Add an OpenVPN or Xray (VLESS) profile with the button above. You can also drop a file here."))
                 .foregroundStyle(.secondary)
-            Button {
-                showAddSheet = true
-            } label: {
-                Label(L10n.tr("profiles_add", "Add profile"), systemImage: "plus")
-            }
-            .buttonStyle(.bordered)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,29 +196,41 @@ struct ManualProfilesPageView: View {
             }
             HStack(spacing: 10) {
                 if connected {
-                    Button(L10n.tr("home_disconnect", "Disconnect")) {
+                    Button {
                         vm.disconnect()
+                    } label: {
+                        Label(L10n.tr("home_disconnect", "Disconnect"), systemImage: "stop.fill")
                     }
                     .buttonStyle(.bordered)
                     .disabled(!vm.canTapDisconnect)
                 } else {
-                    Button(L10n.tr("home_connect", "Connect")) {
+                    Button {
                         vm.connectManualProfile(id: profile.id)
+                    } label: {
+                        Label(L10n.tr("home_connect", "Connect"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!vm.canTapManualConnect || missingPayload)
                 }
-                Button(L10n.tr("profiles_edit", "Edit")) {
+            }
+            HStack(spacing: 10) {
+                Button {
                     profilePendingEdit = profile
+                } label: {
+                    Label(L10n.tr("profiles_edit", "Edit"), systemImage: "pencil")
                 }
                 .buttonStyle(.bordered)
-                Button(L10n.tr("profiles_rename", "Rename")) {
+                Button {
                     renameDraft = profile.displayName
                     profilePendingRename = profile
+                } label: {
+                    Label(L10n.tr("profiles_rename", "Rename"), systemImage: "character.cursor.ibeam")
                 }
                 .buttonStyle(.bordered)
-                Button(L10n.tr("profiles_delete", "Delete"), role: .destructive) {
+                Button(role: .destructive) {
                     profilePendingDelete = profile
+                } label: {
+                    Label(L10n.tr("profiles_delete", "Delete"), systemImage: "trash")
                 }
                 .buttonStyle(.bordered)
             }
@@ -290,6 +287,7 @@ struct ManualProfilesPageView: View {
         }
         do {
             try store.delete(id: profile.id)
+            vm.clearManualConnectError(id: profile.id)
             actionError = nil
             reloadProfiles()
         } catch {
@@ -298,19 +296,21 @@ struct ManualProfilesPageView: View {
         profilePendingDelete = nil
     }
 
-    private func saveDraft(_ draft: ManualVpnProfileDraft, replacing existing: ManualVpnProfile?) {
-        do {
-            if let existing {
-                let updated = try store.replace(id: existing.id, draft: draft)
-                vm.noteRenamedManualProfile(id: updated.id, displayName: updated.displayName)
-            } else {
-                _ = try store.add(draft)
+    private func saveDraft(_ draft: ManualVpnProfileDraft, replacing existing: ManualVpnProfile?) throws {
+        if let existing {
+            let payloadChanged =
+                existing.kind != draft.kind
+                || ManualVpnProfileStore.normalizedPayload(existing.payload) != ManualVpnProfileStore.normalizedPayload(draft.payload)
+            let updated = try store.replace(id: existing.id, draft: draft)
+            vm.noteRenamedManualProfile(id: updated.id, displayName: updated.displayName)
+            if payloadChanged, vm.isManualProfileConnected(updated.id) {
+                vm.connectManualProfile(id: updated.id)
             }
-            actionError = nil
-            reloadProfiles()
-        } catch {
-            actionError = error.localizedDescription
+        } else {
+            _ = try store.add(draft)
         }
+        actionError = nil
+        reloadProfiles()
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -381,11 +381,12 @@ struct ManualProfilesPageView: View {
 
 private struct AddManualProfileSheet: View {
     let existing: ManualVpnProfile?
-    let onSave: (ManualVpnProfileDraft) -> Void
+    let onSave: (ManualVpnProfileDraft) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var payload = ""
+    @State private var kind: ManualVpnProfileKind = .openVpn
     @State private var errorMessage: String?
 
     var body: some View {
@@ -395,25 +396,39 @@ private struct AddManualProfileSheet: View {
                  : L10n.tr("profiles_edit_title", "Edit local profile"))
                 .font(.title3)
                 .fontWeight(.semibold)
-            Text(L10n.tr("profiles_add_hint", "Paste a VLESS URI, JSON with vless / vlessXhttp, or a full OpenVPN client config. Username/password OpenVPN files are not supported yet."))
+            Text(L10n.tr("profiles_kind_label", "Type"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Picker("", selection: $kind) {
+                Text(L10n.tr("profiles_kind_openvpn", "OpenVPN")).tag(ManualVpnProfileKind.openVpn)
+                Text(L10n.tr("profiles_kind_xray", "Xray (VLESS)")).tag(ManualVpnProfileKind.xray)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(kindHint)
                 .font(.callout)
                 .foregroundStyle(.secondary)
             TextField(L10n.tr("profiles_name_placeholder", "Profile name"), text: $name)
-            TextEditor(text: $payload)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 220)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $payload)
+                    .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 220)
+                if payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(kindPlaceholder)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 16)
+                        .allowsHitTesting(false)
                 }
-            if payload.isEmpty {
-                Text(L10n.tr("profiles_paste_placeholder", "vless://… or client / remote / <ca> …"))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             }
             if let errorMessage {
                 Text(errorMessage)
@@ -421,20 +436,28 @@ private struct AddManualProfileSheet: View {
                     .font(.callout)
             }
             HStack {
-                Button(L10n.tr("profiles_paste", "Paste")) {
+                Button {
                     if let clip = NSPasteboard.general.string(forType: .string) {
                         payload = clip
                     }
+                } label: {
+                    Label(L10n.tr("profiles_paste", "Paste"), systemImage: "doc.on.clipboard")
                 }
-                Button(L10n.tr("profiles_import_file", "Import file…")) {
+                Button {
                     pickFile()
+                } label: {
+                    Label(L10n.tr("profiles_import_file", "Import file…"), systemImage: "folder")
                 }
                 Spacer()
-                Button(L10n.tr("profiles_cancel", "Cancel")) {
+                Button {
                     dismiss()
+                } label: {
+                    Label(L10n.tr("profiles_cancel", "Cancel"), systemImage: "xmark")
                 }
-                Button(L10n.tr("profiles_save", "Save")) {
+                Button {
                     save()
+                } label: {
+                    Label(L10n.tr("profiles_save", "Save"), systemImage: "checkmark")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -446,7 +469,32 @@ private struct AddManualProfileSheet: View {
             if let existing {
                 name = existing.displayName
                 payload = existing.payload
+                kind = existing.kind
             }
+        }
+    }
+
+    private var kindHint: String {
+        switch kind {
+        case .openVpn:
+            return L10n.tr(
+                "profiles_add_hint_openvpn",
+                "Paste a full OpenVPN client config. Username/password files need embedded credentials; interactive login is not supported yet."
+            )
+        case .xray:
+            return L10n.tr(
+                "profiles_add_hint_xray",
+                "Paste a vless:// link or JSON with vless / vlessXhttp."
+            )
+        }
+    }
+
+    private var kindPlaceholder: String {
+        switch kind {
+        case .openVpn:
+            return L10n.tr("profiles_paste_placeholder_openvpn", "client / remote / <ca> …")
+        case .xray:
+            return L10n.tr("profiles_paste_placeholder_xray", "vless://… or { \"vless\": \"…\" }")
         }
     }
 
@@ -455,28 +503,56 @@ private struct AddManualProfileSheet: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [
-            UTType(filenameExtension: "ovpn") ?? .plainText,
-            UTType(filenameExtension: "conf") ?? .plainText,
-            .json,
-            .plainText,
-            .item,
-        ]
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer {
-                if accessed { url.stopAccessingSecurityScopedResource() }
+        switch kind {
+        case .openVpn:
+            panel.allowedContentTypes = [
+                UTType(filenameExtension: "ovpn") ?? .plainText,
+                UTType(filenameExtension: "conf") ?? .plainText,
+                .plainText,
+                .item,
+            ]
+        case .xray:
+            panel.allowedContentTypes = [
+                .json,
+                .plainText,
+                .item,
+            ]
+        }
+        if let window = filePickerHostWindow() {
+            panel.beginSheetModal(for: window) { response in
+                handlePickedFile(response: response, url: panel.url)
             }
-            do {
-                payload = try ManualVpnProfileImporter.readTextFile(at: url)
-                if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    name = url.deletingPathExtension().lastPathComponent
-                }
-                errorMessage = nil
-            } catch {
-                errorMessage = error.localizedDescription
+        } else {
+            panel.begin { response in
+                handlePickedFile(response: response, url: panel.url)
             }
+        }
+    }
+
+    private func filePickerHostWindow() -> NSWindow? {
+        if let key = NSApp.keyWindow, key.sheetParent != nil {
+            return key
+        }
+        if let sheet = NSApp.windows.reversed().first(where: { $0.isVisible && $0.sheetParent != nil }) {
+            return sheet
+        }
+        return NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible)
+    }
+
+    private func handlePickedFile(response: NSApplication.ModalResponse, url: URL?) {
+        guard response == .OK, let url else { return }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            payload = try ManualVpnProfileImporter.readTextFile(at: url)
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                name = url.deletingPathExtension().lastPathComponent
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -485,9 +561,10 @@ private struct AddManualProfileSheet: View {
             let preferred = name.trimmingCharacters(in: .whitespacesAndNewlines)
             let draft = try ManualVpnProfileImporter.importPayload(
                 payload,
-                preferredName: preferred.isEmpty ? nil : preferred
+                preferredName: preferred.isEmpty ? nil : preferred,
+                expectedKind: kind
             )
-            onSave(draft)
+            try onSave(draft)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

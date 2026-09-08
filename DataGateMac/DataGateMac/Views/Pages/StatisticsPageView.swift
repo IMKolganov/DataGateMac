@@ -58,9 +58,7 @@ struct StatisticsPageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text(L10n.tr("stats_title", "Statistics"))
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                    IconSectionTitle(title: L10n.tr("stats_title", "Statistics"), systemImage: "chart.bar.fill", style: .page)
                     Spacer()
                     Button {
                         Task { await load() }
@@ -93,8 +91,7 @@ struct StatisticsPageView: View {
 
     private var dateFilterSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.tr("stats_date_range", "Date range"))
-                .font(.headline)
+            IconSectionTitle(title: L10n.tr("stats_date_range", "Date range"), systemImage: "calendar")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -178,8 +175,7 @@ struct StatisticsPageView: View {
 
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.tr("stats_activity_title", "User activity & traffic"))
-                .font(.headline)
+            IconSectionTitle(title: L10n.tr("stats_activity_title", "User activity & traffic"), systemImage: "chart.line.uptrend.xyaxis")
                 .padding(.top, 8)
                 .padding(.bottom, 18)
             if isLoading {

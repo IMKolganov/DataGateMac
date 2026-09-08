@@ -15,6 +15,13 @@ final class FileTokenStore {
         path = dir.appendingPathComponent("auth.json", isDirectory: false)
     }
 
+    /// Test helper: store at an explicit file path.
+    init(fileURL: URL) {
+        path = fileURL
+        let dir = fileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
     func load() throws -> AuthTokensResponse? {
         guard FileManager.default.fileExists(atPath: path.path) else { return nil }
         let data = try Data(contentsOf: path)

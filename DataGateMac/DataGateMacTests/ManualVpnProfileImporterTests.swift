@@ -29,7 +29,21 @@ final class ManualVpnProfileImporterTests: XCTestCase {
         XCTAssertEqual(config.port, 1194)
         XCTAssertEqual(config.linkProtocol, .udp)
         XCTAssertNil(config.serverId)
+        XCTAssertNil(config.clientCommonName)
+        XCTAssertNil(config.issuedFileName)
         XCTAssertEqual(config.ovpnContent.contains("remote vpn.example.com"), true)
+    }
+
+    func testTunnelConfigPicksOvpnFileNameFromComment() throws {
+        let ovpn = """
+        # backups/cyprus-user.ovpn
+        client
+        proto udp
+        remote vpn.example.com 1194
+        """
+        let draft = try ManualVpnProfileImporter.importPayload(ovpn)
+        let config = try ManualVpnProfileImporter.makeTunnelConfig(from: profile(from: draft))
+        XCTAssertEqual(config.issuedFileName, "cyprus-user.ovpn")
     }
 
     func testRejectsOpenVpnAuthUserPassWithoutEmbeddedCredentials() {
@@ -69,6 +83,7 @@ final class ManualVpnProfileImporterTests: XCTestCase {
         XCTAssertEqual(config.port, 8443)
         XCTAssertEqual(config.xrayShareLink, uri)
         XCTAssertNil(config.serverId)
+        XCTAssertNil(config.clientCommonName)
     }
 
     func testPrefersJsonVlessOverXhttp() throws {
@@ -142,6 +157,37 @@ final class ManualVpnProfileImporterTests: XCTestCase {
             XCTAssertEqual(error as? ManualVpnImportError, .tooLarge)
         }
     }
+
+    func testExpectedKindRejectsMismatch() {
+        let ovpn = """
+        client
+        remote vpn.example.com 1194
+        proto udp
+        """
+        let vless = "vless://abc@10.1.2.3:443?type=tcp#node"
+        XCTAssertThrowsError(try ManualVpnProfileImporter.importPayload(vless, expectedKind: .openVpn)) { error in
+            XCTAssertEqual(error as? ManualVpnImportError, .expectedOpenVpn)
+        }
+        XCTAssertThrowsError(try ManualVpnProfileImporter.importPayload(ovpn, expectedKind: .xray)) { error in
+            XCTAssertEqual(error as? ManualVpnImportError, .expectedXray)
+        }
+    }
+
+    func testExpectedKindImportsMatchingPayload() throws {
+        let ovpn = """
+        client
+        remote vpn.example.com 1194
+        proto udp
+        """
+        let ovpnDraft = try ManualVpnProfileImporter.importPayload(ovpn, expectedKind: .openVpn)
+        XCTAssertEqual(ovpnDraft.kind, .openVpn)
+        let vlessDraft = try ManualVpnProfileImporter.importPayload(
+            "vless://abc@10.1.2.3:443?type=tcp#node",
+            expectedKind: .xray
+        )
+        XCTAssertEqual(vlessDraft.kind, .xray)
+        XCTAssertEqual(vlessDraft.displayName, "node")
+    }
 }
 
 final class ManualVpnProfileStoreTests: XCTestCase {
@@ -160,9 +206,37 @@ final class ManualVpnProfileStoreTests: XCTestCase {
         try store.rename(id: added.id, displayName: "Renamed")
         XCTAssertEqual(try store.profile(id: added.id).displayName, "Renamed")
 
+        let reloaded = ManualVpnProfileStore(directory: dir)
+        XCTAssertEqual(try reloaded.profile(id: added.id).displayName, "Renamed")
+
         try store.delete(id: added.id)
         XCTAssertTrue(try store.list().isEmpty)
         XCTAssertThrowsError(try store.profile(id: added.id))
+    }
+
+    func testLoadsIndexWithFractionalAndUnixDates() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let payloads = dir.appendingPathComponent("payloads", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: payloads, withIntermediateDirectories: true)
+
+        let id = UUID()
+        try "vless://abc@10.1.2.3:443?type=tcp#stored\n"
+            .write(to: payloads.appendingPathComponent("\(id.uuidString).vless"), atomically: true, encoding: .utf8)
+        let index = """
+        {"profiles":[{"createdAt":"2026-09-07T01:02:03.456Z","displayName":"Frac","id":"\(id.uuidString)","kind":"xray","updatedAt":1750000000}]}
+        """
+        try index.write(to: dir.appendingPathComponent("index.json"), atomically: true, encoding: .utf8)
+
+        let store = ManualVpnProfileStore(directory: dir)
+        let listed = try store.list()
+        XCTAssertEqual(listed.count, 1)
+        XCTAssertEqual(listed[0].displayName, "Frac")
+        XCTAssertEqual(listed[0].kind, .xray)
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(listed[0].createdAt, fractional.date(from: "2026-09-07T01:02:03.456Z"))
+        XCTAssertEqual(listed[0].updatedAt.timeIntervalSince1970, 1_750_000_000, accuracy: 0.001)
     }
 
     func testRejectsDuplicatePayload() throws {

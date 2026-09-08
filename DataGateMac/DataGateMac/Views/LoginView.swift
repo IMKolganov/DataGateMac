@@ -90,16 +90,20 @@ struct LoginView: View {
         }
 
         HStack(spacing: 12) {
-            Button(L10n.tr("login_sign_google", "Sign in with Google")) {
+            Button {
                 Task { await signInWithGoogle() }
+            } label: {
+                Label(L10n.tr("login_sign_google", "Sign in with Google"), systemImage: "person.crop.circle.badge.checkmark")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(isSigningIn)
 
             if isSigningIn {
-                Button(L10n.tr("login_cancel", "Cancel")) {
+                Button {
                     canceller?.cancel()
+                } label: {
+                    Label(L10n.tr("login_cancel", "Cancel"), systemImage: "xmark")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -128,19 +132,29 @@ struct LoginView: View {
             }
 
         HStack(spacing: 12) {
-            Button(isVerifyingTotp
-                   ? L10n.tr("login_totp_verifying", "Verifying…")
-                   : L10n.tr("login_totp_verify", "Verify and sign in")) {
+            Button {
                 Task { await verifyTotp(challenge) }
+            } label: {
+                Label(
+                    isVerifyingTotp
+                        ? L10n.tr("login_totp_verifying", "Verifying…")
+                        : L10n.tr("login_totp_verify", "Verify and sign in"),
+                    systemImage: "checkmark.shield"
+                )
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(totpCode.count != 6 || isVerifyingTotp || totpChallengeExpired)
 
-            Button(totpChallengeExpired
-                   ? L10n.tr("login_totp_again", "Sign in again")
-                   : L10n.tr("login_totp_back", "Back to sign in")) {
+            Button {
                 resetTotpChallenge()
+            } label: {
+                Label(
+                    totpChallengeExpired
+                        ? L10n.tr("login_totp_again", "Sign in again")
+                        : L10n.tr("login_totp_back", "Back to sign in"),
+                    systemImage: totpChallengeExpired ? "arrow.counterclockwise" : "chevron.left"
+                )
             }
             .buttonStyle(.bordered)
             .controlSize(.large)

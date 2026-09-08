@@ -21,9 +21,7 @@ struct AccessPageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(L10n.tr("access_title", "Access"))
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                IconSectionTitle(title: L10n.tr("access_title", "Access"), systemImage: "cable.connector", style: .page)
                 Spacer()
                 Button {
                     Task { await loadAll() }
@@ -77,10 +75,7 @@ struct AccessPageView: View {
 
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.tr("access_quota", "Quota"))
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            IconSectionTitle(title: L10n.tr("access_quota", "Quota"), systemImage: "gauge.with.dots.needle.67percent")
 
             if let err = quotaState.errorText, !err.isEmpty {
                 Text(err)
@@ -240,10 +235,7 @@ struct AccessPageView: View {
                 .padding(.top, 8)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.tr("access_servers", "Servers"))
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
+                IconSectionTitle(title: L10n.tr("access_servers", "Servers"), systemImage: "server.rack")
                 serverTable
             }
         }

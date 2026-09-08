@@ -51,6 +51,21 @@ enum JwtClaimReader {
             ?? (json["picture"] as? String)
         return ProfileImageURL.normalizedString(raw)
     }
+
+    /// JWT `exp` claim as a date, when present.
+    static func expiration(fromJwt jwt: String) -> Date? {
+        guard let json = jwtPayload(from: jwt) else { return nil }
+        if let value = json["exp"] as? Double {
+            return Date(timeIntervalSince1970: value)
+        }
+        if let value = json["exp"] as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(value))
+        }
+        if let value = json["exp"] as? String, let parsed = Double(value) {
+            return Date(timeIntervalSince1970: parsed)
+        }
+        return nil
+    }
 }
 
 /// Google / backend profile photos must be HTTPS (same rule as the backend normalizer).

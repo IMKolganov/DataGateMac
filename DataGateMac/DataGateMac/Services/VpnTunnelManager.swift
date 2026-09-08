@@ -112,6 +112,10 @@ struct TunnelConfig: Sendable {
     var serverId: Int?
     /// Set when the tunnel was started from a locally imported profile (no backend stats).
     var manualProfileId: String? = nil
+    /// Device CN used to issue the backend OpenVPN / Xray client (`mdg-…` / `mdg-xray-…`).
+    var clientCommonName: String? = nil
+    /// Backend issued file name (usually `{cn}.ovpn`); shown next to CN when present.
+    var issuedFileName: String? = nil
 
     func toProviderConfiguration() -> [String: Any] {
         var dict: [String: Any] = [
@@ -132,6 +136,12 @@ struct TunnelConfig: Sendable {
         if let manualProfileId, !manualProfileId.isEmpty {
             dict["manualProfileId"] = manualProfileId
         }
+        if let clientCommonName, !clientCommonName.isEmpty {
+            dict["clientCommonName"] = clientCommonName
+        }
+        if let issuedFileName, !issuedFileName.isEmpty {
+            dict["issuedFileName"] = issuedFileName
+        }
         return dict
     }
 
@@ -143,6 +153,8 @@ struct TunnelConfig: Sendable {
         let ovpnContent = dictionary["ovpnContent"] as? String ?? ""
         let xrayShareLink = dictionary["xrayShareLink"] as? String ?? ""
         let display = (dictionary["serverDisplayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let storedCn = (dictionary["clientCommonName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let storedFile = (dictionary["issuedFileName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let modeRaw = (dictionary["transportMode"] as? String ?? "").lowercased()
         let transportMode = TunnelTransportMode(rawValue: modeRaw) ?? .wss
         if transportMode == .xray {
@@ -162,7 +174,9 @@ struct TunnelConfig: Sendable {
             transportMode: transportMode,
             serverDisplayName: display.isEmpty ? host : display,
             serverId: dictionary["serverId"] as? Int,
-            manualProfileId: dictionary["manualProfileId"] as? String
+            manualProfileId: dictionary["manualProfileId"] as? String,
+            clientCommonName: storedCn.isEmpty ? nil : storedCn,
+            issuedFileName: storedFile.isEmpty ? nil : storedFile
         )
     }
 
@@ -576,6 +590,37 @@ final class VpnTunnelManager: ObservableObject {
     func stopTunnel() {
         stopStatusPollTimer()
         manager?.connection.stopVPNTunnel()
+    }
+
+    /// Live utun byte counters from the packet-tunnel extension (this Mac, not backend).
+    func fetchLiveTraffic() async -> (bytesIn: UInt64, bytesOut: UInt64)? {
+        guard let session = manager?.connection as? NETunnelProviderSession,
+              session.status == .connected else {
+            return nil
+        }
+        return await withCheckedContinuation { cont in
+            do {
+                try session.sendProviderMessage(Data("stats".utf8)) { data in
+                    guard let data,
+                          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                        cont.resume(returning: nil)
+                        return
+                    }
+                    let bytesIn = Self.jsonUInt64(object["in"])
+                    let bytesOut = Self.jsonUInt64(object["out"])
+                    cont.resume(returning: (bytesIn, bytesOut))
+                }
+            } catch {
+                cont.resume(returning: nil)
+            }
+        }
+    }
+
+    private static func jsonUInt64(_ raw: Any?) -> UInt64 {
+        if let n = raw as? NSNumber { return n.uint64Value }
+        if let i = raw as? Int, i >= 0 { return UInt64(i) }
+        if let u = raw as? UInt64 { return u }
+        return 0
     }
 
     /// Current status text for UI (Connected / Disconnected / Connecting etc.).

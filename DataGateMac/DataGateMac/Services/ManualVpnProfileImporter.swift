@@ -10,6 +10,8 @@ import Foundation
 enum ManualVpnImportError: LocalizedError, Equatable {
     case empty
     case unrecognized
+    case expectedOpenVpn
+    case expectedXray
     case ovpnNeedsPassword
     case ovpnNoRemote
     case xrayNoHost
@@ -23,6 +25,16 @@ enum ManualVpnImportError: LocalizedError, Equatable {
             return L10n.tr(
                 "profiles_err_unrecognized",
                 "Could not recognize this as an OpenVPN profile or a VLESS link."
+            )
+        case .expectedOpenVpn:
+            return L10n.tr(
+                "profiles_err_expected_openvpn",
+                "This is not an OpenVPN profile. Choose Xray if you are pasting a VLESS link."
+            )
+        case .expectedXray:
+            return L10n.tr(
+                "profiles_err_expected_xray",
+                "This is not a VLESS link. Choose OpenVPN if you are pasting a .ovpn config."
             )
         case .ovpnNeedsPassword:
             return L10n.tr(
@@ -54,53 +66,34 @@ enum ManualVpnProfileImporter {
     static func importPayload(
         _ raw: String,
         preferredName: String? = nil,
-        fileName: String? = nil
+        fileName: String? = nil,
+        expectedKind: ManualVpnProfileKind? = nil
     ) throws -> ManualVpnProfileDraft {
         let content = stripBOM(raw).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { throw ManualVpnImportError.empty }
         guard content.utf8.count <= maxPayloadUTF8Bytes else { throw ManualVpnImportError.tooLarge }
 
-        // OpenVPN first: a comment or cert blob may contain the substring vless://.
-        if looksLikeOpenVpn(content) {
-            if requiresInteractiveOpenVpnAuth(content) {
-                throw ManualVpnImportError.ovpnNeedsPassword
+        switch expectedKind {
+        case .openVpn:
+            if looksLikeOpenVpn(content) || OvpnProfileParser.firstRemote(in: content) != nil {
+                return try makeOpenVpnDraft(content, preferredName: preferredName, fileName: fileName)
             }
-            guard let remote = OvpnProfileParser.firstRemote(in: content) else {
-                throw ManualVpnImportError.ovpnNoRemote
+            if XrayClientLinkParser.extractVlessUri(fromRawContent: content) != nil {
+                throw ManualVpnImportError.expectedOpenVpn
             }
-            let suggested = openVpnCommentName(content)
-                ?? fileStem(fileName)
-                ?? remote.host
-            return ManualVpnProfileDraft(
-                displayName: resolvedDisplayName(
-                    preferredName: preferredName,
-                    suggested: suggested,
-                    fallback: L10n.tr("profiles_default_openvpn", "OpenVPN profile")
-                ),
-                kind: .openVpn,
-                payload: content + (content.hasSuffix("\n") ? "" : "\n")
-            )
+            throw ManualVpnImportError.ovpnNoRemote
+        case .xray:
+            if looksLikeOpenVpn(content) {
+                throw ManualVpnImportError.expectedXray
+            }
+            return try makeXrayDraft(content, preferredName: preferredName, fileName: fileName)
+        case nil:
+            // OpenVPN first: a comment or cert blob may contain the substring vless://.
+            if looksLikeOpenVpn(content) {
+                return try makeOpenVpnDraft(content, preferredName: preferredName, fileName: fileName)
+            }
+            return try makeXrayDraft(content, preferredName: preferredName, fileName: fileName)
         }
-
-        if let vless = XrayClientLinkParser.extractVlessUri(fromRawContent: content) {
-            guard let remote = XrayClientLinkParser.remote(fromVless: vless) else {
-                throw ManualVpnImportError.xrayNoHost
-            }
-            let suggested = XrayClientLinkParser.displayName(fromVless: vless)
-                ?? fileStem(fileName)
-                ?? remote.host
-            return ManualVpnProfileDraft(
-                displayName: resolvedDisplayName(
-                    preferredName: preferredName,
-                    suggested: suggested,
-                    fallback: L10n.tr("profiles_default_xray", "VLESS profile")
-                ),
-                kind: .xray,
-                payload: vless
-            )
-        }
-
-        throw ManualVpnImportError.unrecognized
     }
 
     static func makeTunnelConfig(from profile: ManualVpnProfile) throws -> TunnelConfig {
@@ -125,7 +118,8 @@ enum ManualVpnProfileImporter {
                 transportMode: .direct,
                 serverDisplayName: profile.displayName,
                 serverId: nil,
-                manualProfileId: profile.id.uuidString
+                manualProfileId: profile.id.uuidString,
+                issuedFileName: IssuedClientIdentity.fileName(fromOvpnComments: profile.payload)
             )
         case .xray:
             guard let vless = XrayClientLinkParser.extractVlessUri(fromRawContent: profile.payload) else {
@@ -149,6 +143,56 @@ enum ManualVpnProfileImporter {
                 manualProfileId: profile.id.uuidString
             )
         }
+    }
+
+    private static func makeOpenVpnDraft(
+        _ content: String,
+        preferredName: String?,
+        fileName: String?
+    ) throws -> ManualVpnProfileDraft {
+        if requiresInteractiveOpenVpnAuth(content) {
+            throw ManualVpnImportError.ovpnNeedsPassword
+        }
+        guard let remote = OvpnProfileParser.firstRemote(in: content) else {
+            throw ManualVpnImportError.ovpnNoRemote
+        }
+        let suggested = openVpnCommentName(content)
+            ?? fileStem(fileName)
+            ?? remote.host
+        return ManualVpnProfileDraft(
+            displayName: resolvedDisplayName(
+                preferredName: preferredName,
+                suggested: suggested,
+                fallback: L10n.tr("profiles_default_openvpn", "OpenVPN profile")
+            ),
+            kind: .openVpn,
+            payload: content + (content.hasSuffix("\n") ? "" : "\n")
+        )
+    }
+
+    private static func makeXrayDraft(
+        _ content: String,
+        preferredName: String?,
+        fileName: String?
+    ) throws -> ManualVpnProfileDraft {
+        guard let vless = XrayClientLinkParser.extractVlessUri(fromRawContent: content) else {
+            throw ManualVpnImportError.unrecognized
+        }
+        guard let remote = XrayClientLinkParser.remote(fromVless: vless) else {
+            throw ManualVpnImportError.xrayNoHost
+        }
+        let suggested = XrayClientLinkParser.displayName(fromVless: vless)
+            ?? fileStem(fileName)
+            ?? remote.host
+        return ManualVpnProfileDraft(
+            displayName: resolvedDisplayName(
+                preferredName: preferredName,
+                suggested: suggested,
+                fallback: L10n.tr("profiles_default_xray", "VLESS profile")
+            ),
+            kind: .xray,
+            payload: vless
+        )
     }
 
     static func looksLikeOpenVpn(_ content: String) -> Bool {

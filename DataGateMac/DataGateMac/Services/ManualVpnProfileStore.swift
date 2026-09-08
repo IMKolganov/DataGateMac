@@ -225,6 +225,18 @@ final class ManualVpnProfileStore {
         try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
+    private func saveIndex(_ index: IndexFile) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(Self.isoDateFormatter.string(from: date))
+        }
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(index)
+        try data.write(to: indexURL, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: indexURL.path)
+    }
+
     private func loadIndex() throws -> IndexFile {
         guard fileManager.fileExists(atPath: indexURL.path) else {
             return IndexFile(profiles: [])
@@ -234,17 +246,19 @@ final class ManualVpnProfileStore {
             return IndexFile(profiles: [])
         }
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let text = try? container.decode(String.self) {
+                if let date = Self.isoFractionalDateFormatter.date(from: text) ?? Self.isoDateFormatter.date(from: text) {
+                    return date
+                }
+            }
+            if let interval = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: interval)
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid profile date")
+        }
         return try decoder.decode(IndexFile.self, from: data)
-    }
-
-    private func saveIndex(_ index: IndexFile) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(index)
-        try data.write(to: indexURL, options: .atomic)
-        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: indexURL.path)
     }
 
     private struct IndexFile: Codable {
@@ -258,4 +272,16 @@ final class ManualVpnProfileStore {
         var createdAt: Date
         var updatedAt: Date
     }
+
+    private static let isoDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let isoFractionalDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

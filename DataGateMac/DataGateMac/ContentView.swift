@@ -24,12 +24,7 @@ struct ContentView: View {
                 .font(.callout)
                 .foregroundStyle(vm.isConnected ? .green : .secondary)
 
-            if !vm.activeTunnelSummary.isEmpty {
-                Text(vm.activeTunnelSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            TunnelSessionIdentityList(rows: vm.connectionIdentityRows)
 
             Button {
                 vm.toggle()
