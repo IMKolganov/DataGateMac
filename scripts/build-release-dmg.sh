@@ -53,6 +53,16 @@ mkdir -p "$EXPORT_DIR"
 echo "Copying app from archive..."
 ditto "$ARCHIVE_APP" "$APP_PATH"
 
+CONFIG_PLIST="$REPO_DIR/DataGateMac/DataGateMac/Config.plist"
+if [[ ! -f "$CONFIG_PLIST" ]]; then
+  echo "Config.plist not found at $CONFIG_PLIST"
+  echo "The GitHub DMG needs APIBaseURL and GIDClientID; copy Config.example.plist to Config.plist first."
+  exit 1
+fi
+echo "Embedding Config.plist into app Resources..."
+mkdir -p "$APP_PATH/Contents/Resources"
+cp "$CONFIG_PLIST" "$APP_PATH/Contents/Resources/Config.plist"
+
 echo "Re-signing for Developer ID distribution..."
 bash "$SCRIPT_DIR/resign-developer-id-app.sh" "$APP_PATH"
 
