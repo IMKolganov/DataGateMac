@@ -267,12 +267,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(nil)
             return
         }
-        let snap = TunnelTrafficMeter.snapshot() ?? (bytesIn: UInt64(0), bytesOut: UInt64(0))
-        let payload: [String: Any] = [
-            "in": snap.bytesIn,
-            "out": snap.bytesOut,
-        ]
-        completionHandler?(try? JSONSerialization.data(withJSONObject: payload))
+        completionHandler?(LiveTrafficStatsCodec.encode(TunnelTrafficMeter.snapshot()))
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
@@ -567,14 +562,20 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 }
 
-/// Device-side utun byte counters for the live Home traffic chart (not backend stats).
+/// Device-side counters for the live Home traffic chart (not backend stats).
 enum TunnelTrafficMeter {
     private static let lock = NSLock()
     private static var interfaceName: String?
+    /// Bytes written into the TUN (download). OpenVPN uses packetFlow; utun if_data often stays 0.
+    private static var flowBytesIn: UInt64 = 0
+    /// Bytes read from the TUN (upload).
+    private static var flowBytesOut: UInt64 = 0
 
     static func reset() {
         lock.lock()
         interfaceName = nil
+        flowBytesIn = 0
+        flowBytesOut = 0
         lock.unlock()
     }
 
@@ -585,14 +586,30 @@ enum TunnelTrafficMeter {
         lock.unlock()
     }
 
-    static func snapshot() -> (bytesIn: UInt64, bytesOut: UInt64)? {
+    static func addFromTun(_ bytes: UInt64) {
+        guard bytes > 0 else { return }
+        lock.lock()
+        flowBytesOut &+= bytes
+        lock.unlock()
+    }
+
+    static func addToTun(_ bytes: UInt64) {
+        guard bytes > 0 else { return }
+        lock.lock()
+        flowBytesIn &+= bytes
+        lock.unlock()
+    }
+
+    static func snapshot() -> LiveTrafficSnapshot {
         lock.lock()
         let name = interfaceName
+        let flow = LiveTrafficSnapshot(bytesIn: flowBytesIn, bytesOut: flowBytesOut)
         lock.unlock()
-        guard let name, let counts = interfaceByteCounts(ifName: name) else {
-            return interfaceByteCountsForAnyUtun()
-        }
-        return counts
+        let utun: LiveTrafficSnapshot? = {
+            guard let name, let counts = interfaceByteCounts(ifName: name) else { return nil }
+            return LiveTrafficSnapshot(bytesIn: counts.bytesIn, bytesOut: counts.bytesOut)
+        }()
+        return LiveTrafficCounterSource.preferred(flow: flow, utun: utun)
     }
 
     private static func utunInterfaceName(from fd: Int32) -> String? {
@@ -625,31 +642,15 @@ enum TunnelTrafficMeter {
         }
         return nil
     }
+}
 
-    private static func interfaceByteCountsForAnyUtun() -> (bytesIn: UInt64, bytesOut: UInt64)? {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
-        defer { freeifaddrs(ifaddr) }
-        var best: (bytesIn: UInt64, bytesOut: UInt64)?
-        var bestTotal: UInt64 = 0
-        var ptr: UnsafeMutablePointer<ifaddrs>? = first
-        while let current = ptr {
-            let name = String(cString: current.pointee.ifa_name)
-            if name.hasPrefix("utun"),
-               let addr = current.pointee.ifa_addr,
-               addr.pointee.sa_family == UInt8(AF_LINK),
-               let data = current.pointee.ifa_data {
-                let stats = data.assumingMemoryBound(to: if_data.self).pointee
-                let inn = UInt64(stats.ifi_ibytes)
-                let out = UInt64(stats.ifi_obytes)
-                let total = inn &+ out
-                if total >= bestTotal {
-                    bestTotal = total
-                    best = (inn, out)
-                }
-            }
-            ptr = current.pointee.ifa_next
-        }
-        return best
+@objcMembers
+final class TunnelTrafficMeterBridge: NSObject {
+    @objc static func addToTun(_ bytes: UInt64) {
+        TunnelTrafficMeter.addToTun(bytes)
+    }
+
+    @objc static func addFromTun(_ bytes: UInt64) {
+        TunnelTrafficMeter.addFromTun(bytes)
     }
 }

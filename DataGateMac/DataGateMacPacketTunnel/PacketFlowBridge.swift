@@ -39,6 +39,7 @@ final class PacketFlowBridge {
     /// Write packets to the TUN. Call from the VPN engine when it has decrypted packets to inject.
     func writePacketsToTun(_ packets: [Data], protocols: [NSNumber]) {
         guard !packets.isEmpty, !isStopped else { return }
+        TunnelTrafficMeter.addToTun(Self.byteCount(of: packets))
         packetFlow.writePackets(packets, withProtocols: protocols)
     }
 
@@ -46,10 +47,15 @@ final class PacketFlowBridge {
         guard !isStopped else { return }
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self, !self.isStopped else { return }
+            TunnelTrafficMeter.addFromTun(Self.byteCount(of: packets))
             if let handler = self.onPacketFromTun {
                 for packet in packets { handler(packet) }
             }
             self.queue.async { self.readLoop() }
         }
+    }
+
+    private static func byteCount(of packets: [Data]) -> UInt64 {
+        packets.reduce(into: UInt64(0)) { $0 += UInt64($1.count) }
     }
 }

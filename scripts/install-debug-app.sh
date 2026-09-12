@@ -5,6 +5,18 @@ if [[ "${CONFIGURATION:-}" != "Debug" ]]; then
   exit 0
 fi
 
+# `xcodebuild test` builds Debug with coverage and would overwrite a Developer ID
+# install in /Applications (VPN then fails with code 14). Skip unless forced.
+if [[ "${DATAGATE_FORCE_DEBUG_INSTALL:-}" != "1" ]]; then
+  if [[ "${ENABLE_CODE_COVERAGE:-NO}" == "YES" || "${CLANG_COVERAGE_MAPPING:-NO}" == "YES" ]]; then
+    echo "Skipping /Applications install during test/coverage build"
+    exit 0
+  fi
+  if [[ "${SKIP_DEBUG_APP_INSTALL:-}" == "1" ]]; then
+    exit 0
+  fi
+fi
+
 if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${FULL_PRODUCT_NAME:-}" ]]; then
   echo "warning: Missing Xcode build environment, skipping debug app install."
   exit 0

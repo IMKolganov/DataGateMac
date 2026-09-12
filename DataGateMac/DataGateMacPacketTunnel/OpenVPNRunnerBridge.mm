@@ -11,6 +11,7 @@
 #import <unistd.h>
 
 #import <CoreFoundation/CoreFoundation.h>
+#import "DataGateMacPacketTunnel-Swift.h"
 
 #include <atomic>
 #include <memory>
@@ -569,6 +570,11 @@ static NSError *OpenVPNRunnerError(NSInteger code, NSString *description) {
         if (packetBatch.count == 0) {
             continue;
         }
+        uint64_t written = 0;
+        for (NSData *packet in packetBatch) {
+            written += (uint64_t)packet.length;
+        }
+        [TunnelTrafficMeterBridge addToTun:written];
         [flow writePackets:packetBatch withProtocols:protoBatch];
     }
 }

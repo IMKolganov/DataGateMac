@@ -8,6 +8,15 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    override init() {
+        super.init()
+        CrashReporting.install()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        CrashReporting.startUploadOnLaunch()
+    }
+
     /// Closing the last window should end the session (same quit path as Cmd+Q), so VPN confirmation runs.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true

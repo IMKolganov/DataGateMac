@@ -592,35 +592,42 @@ final class VpnTunnelManager: ObservableObject {
         manager?.connection.stopVPNTunnel()
     }
 
-    /// Live utun byte counters from the packet-tunnel extension (this Mac, not backend).
-    func fetchLiveTraffic() async -> (bytesIn: UInt64, bytesOut: UInt64)? {
+    /// Live tunnel byte counters: extension IPC, then host utun (OpenVPN traffic is visible on the tun even when IPC is nil).
+    func fetchLiveTraffic() async -> LiveTrafficSnapshot? {
+        let host = LiveTrafficHostInterfaceStats.snapshot()
         guard let session = manager?.connection as? NETunnelProviderSession,
-              session.status == .connected else {
-            return nil
+              session.status == .connected || session.status == .reasserting else {
+            return host
         }
-        return await withCheckedContinuation { cont in
-            do {
-                try session.sendProviderMessage(Data("stats".utf8)) { data in
-                    guard let data,
-                          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                        cont.resume(returning: nil)
-                        return
-                    }
-                    let bytesIn = Self.jsonUInt64(object["in"])
-                    let bytesOut = Self.jsonUInt64(object["out"])
-                    cont.resume(returning: (bytesIn, bytesOut))
-                }
-            } catch {
-                cont.resume(returning: nil)
-            }
-        }
+        let ipc = await ipcTrafficSnapshot(session: session, timeout: 0.4)
+        return LiveTrafficCounterSource.preferred(flow: ipc ?? .zero, utun: host)
     }
 
-    private static func jsonUInt64(_ raw: Any?) -> UInt64 {
-        if let n = raw as? NSNumber { return n.uint64Value }
-        if let i = raw as? Int, i >= 0 { return UInt64(i) }
-        if let u = raw as? UInt64 { return u }
-        return 0
+    private func ipcTrafficSnapshot(session: NETunnelProviderSession, timeout: TimeInterval) async -> LiveTrafficSnapshot? {
+        await withTaskGroup(of: LiveTrafficSnapshot?.self) { group in
+            group.addTask {
+                await withCheckedContinuation { (cont: CheckedContinuation<LiveTrafficSnapshot?, Never>) in
+                    do {
+                        try session.sendProviderMessage(Data("stats".utf8)) { data in
+                            guard let data else {
+                                cont.resume(returning: nil)
+                                return
+                            }
+                            cont.resume(returning: LiveTrafficStatsCodec.decode(data))
+                        }
+                    } catch {
+                        cont.resume(returning: nil)
+                    }
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? nil
+        }
     }
 
     /// Current status text for UI (Connected / Disconnected / Connecting etc.).

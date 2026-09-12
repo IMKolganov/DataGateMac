@@ -12,6 +12,7 @@ struct DataGateMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        CrashReporting.install()
         AppLanguageStorage.normalizeIfNeeded()
     }
 

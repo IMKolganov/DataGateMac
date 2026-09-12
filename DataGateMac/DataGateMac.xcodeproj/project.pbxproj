@@ -26,6 +26,9 @@
 		DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */; };
 		DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00112F6100100C61F86 /* AuthProfileTests.swift */; };
 		DA5T00222F7100100C61F86 /* ManualVpnProfileImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */; };
+		DA5T00322F8100100C61F86 /* LiveTrafficStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00312F8100100C61F86 /* LiveTrafficStatsTests.swift */; };
+		DA5T00522F9100100C61F86 /* CrashReportingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00512F9100100C61F86 /* CrashReportingTests.swift */; };
+		DA5T00422F8100100C61F86 /* LiveTrafficStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5T00412F8100100C61F86 /* LiveTrafficStats.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,6 +87,9 @@
 		DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnProfileMigrationPolicyTests.swift; sourceTree = "<group>"; };
 		DA5T00112F6100100C61F86 /* AuthProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthProfileTests.swift; sourceTree = "<group>"; };
 		DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualVpnProfileImporterTests.swift; sourceTree = "<group>"; };
+		DA5T00312F8100100C61F86 /* LiveTrafficStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTrafficStatsTests.swift; sourceTree = "<group>"; };
+		DA5T00512F9100100C61F86 /* CrashReportingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingTests.swift; sourceTree = "<group>"; };
+		DA5T00412F8100100C61F86 /* LiveTrafficStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LiveTrafficStats.swift; path = DataGateMac/Services/LiveTrafficStats.swift; sourceTree = SOURCE_ROOT; };
 		DA5T00062F5000100C61F86 /* DataGateMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DataGateMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -144,6 +150,8 @@
 				DA5T00012F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift */,
 				DA5T00112F6100100C61F86 /* AuthProfileTests.swift */,
 				DA5T00212F7100100C61F86 /* ManualVpnProfileImporterTests.swift */,
+				DA5T00312F8100100C61F86 /* LiveTrafficStatsTests.swift */,
+				DA5T00512F9100100C61F86 /* CrashReportingTests.swift */,
 			);
 			path = DataGateMacTests;
 			sourceTree = "<group>";
@@ -171,6 +179,7 @@
 				DAX10001FD3000100A1B2C3 /* XrayRunnerBridge.h */,
 				DAX10002FD3000100A1B2C3 /* XrayRunnerBridge.m */,
 				DAX10003FD3000100A1B2C3 /* XrayConfigAssembler.swift */,
+				DA5T00412F8100100C61F86 /* LiveTrafficStats.swift */,
 				DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */,
 				DA5124D32F2F807100C61F86 /* Info.plist */,
 				DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */,
@@ -395,6 +404,7 @@
 				DAB100012FD3000100A1B2C3 /* OpenVPNRunnerBridge.mm in Sources */,
 				DAX10011FD3000100A1B2C3 /* XrayRunnerBridge.m in Sources */,
 				DAX10012FD3000100A1B2C3 /* XrayConfigAssembler.swift in Sources */,
+				DA5T00422F8100100C61F86 /* LiveTrafficStats.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +415,8 @@
 				DA5T00022F5000100C61F86 /* VpnProfileMigrationPolicyTests.swift in Sources */,
 				DA5T00122F6100100C61F86 /* AuthProfileTests.swift in Sources */,
 				DA5T00222F7100100C61F86 /* ManualVpnProfileImporterTests.swift in Sources */,
+				DA5T00322F8100100C61F86 /* LiveTrafficStatsTests.swift in Sources */,
+				DA5T00522F9100100C61F86 /* CrashReportingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -552,7 +564,7 @@
 				CODE_SIGN_ENTITLEMENTS = DataGateMac/DataGateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -565,7 +577,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -586,7 +598,7 @@
 				CODE_SIGN_ENTITLEMENTS = DataGateMac/DataGateMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -599,7 +611,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -617,7 +629,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_DEBUG_DYLIB = NO;
@@ -653,7 +665,7 @@
 					"$(PROJECT_DIR)/../build-engine",
 					"$(PROJECT_DIR)/../build-libxray",
 				);
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(inherited)",
 					"-std=gnu++20",
@@ -689,7 +701,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = DataGateMacPacketTunnel/DataGateMacPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_DEBUG_DYLIB = NO;
@@ -725,7 +737,7 @@
 					"$(PROJECT_DIR)/../build-engine",
 					"$(PROJECT_DIR)/../build-libxray",
 				);
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(inherited)",
 					"-std=gnu++20",
@@ -761,11 +773,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMacTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -779,11 +791,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = RB28BRDVNP;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = imkolganov.DataGateMacTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

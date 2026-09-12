@@ -95,9 +95,7 @@ final class VpnViewModel: ObservableObject {
     private let manualProfileStore: ManualVpnProfileStore
     private var extensionLogPollTimer: Timer?
     private var liveTrafficPollTimer: Timer?
-    private var lastLiveBytesIn: UInt64?
-    private var lastLiveBytesOut: UInt64?
-    private var lastLiveTrafficAt: Date?
+    private var liveTrafficSampler = LiveTrafficSampler()
     private var cancellables = Set<AnyCancellable>()
     /// Reading the shared App Group container from the host app triggers
     /// macOS "access data from other apps" prompts on some systems.
@@ -859,38 +857,23 @@ final class VpnViewModel: ObservableObject {
     private func stopLiveTrafficPolling() {
         liveTrafficPollTimer?.invalidate()
         liveTrafficPollTimer = nil
-        lastLiveBytesIn = nil
-        lastLiveBytesOut = nil
-        lastLiveTrafficAt = nil
-        liveTrafficSamples = []
-        liveBytesIn = 0
-        liveBytesOut = 0
-        liveDownBytesPerSec = 0
-        liveUpBytesPerSec = 0
+        liveTrafficSampler.reset()
+        publishLiveTraffic()
     }
 
     private func pollLiveTraffic() async {
         guard isConnected || tunnelManager.status == .reasserting else { return }
         guard let snap = await tunnelManager.fetchLiveTraffic() else { return }
-        let now = Date()
-        if let lastIn = lastLiveBytesIn, let lastOut = lastLiveBytesOut, let lastAt = lastLiveTrafficAt {
-            let dt = now.timeIntervalSince(lastAt)
-            if dt > 0, snap.bytesIn >= lastIn, snap.bytesOut >= lastOut {
-                liveDownBytesPerSec = Double(snap.bytesIn - lastIn) / dt
-                liveUpBytesPerSec = Double(snap.bytesOut - lastOut) / dt
-                liveTrafficSamples.append(
-                    LiveTrafficSample(at: now, downBytesPerSec: liveDownBytesPerSec, upBytesPerSec: liveUpBytesPerSec)
-                )
-                if liveTrafficSamples.count > 60 {
-                    liveTrafficSamples.removeFirst(liveTrafficSamples.count - 60)
-                }
-            }
-        }
-        lastLiveBytesIn = snap.bytesIn
-        lastLiveBytesOut = snap.bytesOut
-        lastLiveTrafficAt = now
-        liveBytesIn = snap.bytesIn
-        liveBytesOut = snap.bytesOut
+        liveTrafficSampler.apply(snap, at: Date())
+        publishLiveTraffic()
+    }
+
+    private func publishLiveTraffic() {
+        liveTrafficSamples = liveTrafficSampler.samples
+        liveBytesIn = liveTrafficSampler.bytesIn
+        liveBytesOut = liveTrafficSampler.bytesOut
+        liveDownBytesPerSec = liveTrafficSampler.downBytesPerSec
+        liveUpBytesPerSec = liveTrafficSampler.upBytesPerSec
     }
 
     private func appendLog(_ line: String) {
@@ -907,11 +890,4 @@ struct TunnelSessionIdentityRow: Identifiable, Equatable, Sendable {
     let label: String
     let value: String
     var usesMonospace: Bool = false
-}
-
-struct LiveTrafficSample: Identifiable, Equatable, Sendable {
-    let at: Date
-    let downBytesPerSec: Double
-    let upBytesPerSec: Double
-    var id: Date { at }
 }

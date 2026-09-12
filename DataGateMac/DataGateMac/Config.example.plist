@@ -8,5 +8,7 @@
 	<string>your_client_id.apps.googleusercontent.com</string>
 	<key>RedirectPort</key>
 	<integer>51723</integer>
+	<key>CrashReportToken</key>
+	<string></string>
 </dict>
 </plist>

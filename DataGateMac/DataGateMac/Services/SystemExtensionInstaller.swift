@@ -84,14 +84,6 @@ enum SystemExtensionInstaller {
         let lastHash = UserDefaults.standard.string(forKey: TunnelConstants.lastActivatedSysexHashDefaultsKey)
         let lastVersion = UserDefaults.standard.string(forKey: TunnelConstants.lastActivatedSysexBundleVersionDefaultsKey)
 
-        #if !DEBUG
-        if let currentHash, let lastHash, lastHash == currentHash,
-           let currentVersion, let lastVersion, lastVersion == currentVersion {
-            log.debug("Embedded system extension unchanged; skipping activation request")
-            return
-        }
-        #endif
-
         if lastVersion != nil, lastVersion != currentVersion {
             log.notice("Embedded sysex build \(currentVersion ?? "?") != last activated \(lastVersion ?? "?"); submitting activation so the system can replace it")
         } else if lastHash != nil, lastHash != currentHash {
