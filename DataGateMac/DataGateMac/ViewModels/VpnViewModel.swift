@@ -99,6 +99,8 @@ final class VpnViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// True while an extension-log IPC poll is running (avoid overlapping Tasks).
     private var extensionLogPollInFlight = false
+    /// Waiters for the in-flight poll so connect-failure handling does not skip logs.
+    private var extensionLogPollWaiters: [CheckedContinuation<Void, Never>] = []
     /// True while loadOrCreateConfiguration / setConfiguration is in progress.
     private var isPreparing: Bool = false
     /// True from Connect tap until startTunnel() has been called (or failed). Prevents multiple connect taps.
@@ -188,9 +190,21 @@ final class VpnViewModel: ObservableObject {
     }
 
     private func pollExtensionLog() async {
-        guard !extensionLogPollInFlight else { return }
+        if extensionLogPollInFlight {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                extensionLogPollWaiters.append(cont)
+            }
+            return
+        }
         extensionLogPollInFlight = true
-        defer { extensionLogPollInFlight = false }
+        defer {
+            extensionLogPollInFlight = false
+            let waiters = extensionLogPollWaiters
+            extensionLogPollWaiters.removeAll()
+            for waiter in waiters {
+                waiter.resume()
+            }
+        }
         guard let text = await tunnelManager.fetchExtensionLog() else { return }
         if !text.isEmpty {
             extensionLogText = text
