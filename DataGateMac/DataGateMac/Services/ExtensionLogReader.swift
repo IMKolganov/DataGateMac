@@ -2,27 +2,38 @@
 //  ExtensionLogReader.swift
 //  DataGateMac
 //
-//  Reads (and optionally clears) the extension log file from the App Group container so the app can show it in UI.
+//  Host-side engine log helpers. Packet-tunnel lines come from IPC
+//  (`sendProviderMessage("logs")`), not from an App Group file (sysex runs as root).
 //
 
 import Foundation
+import NetworkExtension
 
 enum ExtensionLogReader {
     static let appGroupId = "group.imkolganov.DataGateMac"
-    private static let logFileName = "extension.log"
+    static let ipcCommandLogs = "logs"
+}
 
-    static func read() -> String {
-        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else { return "" }
-        let fileURL = container.appendingPathComponent(logFileName)
-        guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL),
-              let text = String(data: data, encoding: .utf8) else { return "" }
-        return text
+enum EngineLogDisplay {
+    static func combined(hostLog: String, extensionLog: String, separator: String, emptyExtensionPlaceholder: String) -> String {
+        let extensionSection = extensionLog.isEmpty ? emptyExtensionPlaceholder : extensionLog
+        let host = hostLog.trimmingCharacters(in: .whitespacesAndNewlines)
+        if host.isEmpty {
+            return extensionSection
+        }
+        return host + "\n\n" + separator + "\n" + extensionSection
     }
+}
 
-    static func clear() {
-        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else { return }
-        let fileURL = container.appendingPathComponent(logFileName)
-        try? FileManager.default.removeItem(at: fileURL)
+enum ExtensionLogConnectFailure {
+    /// Warn only after a failed Connecting transition, and only if the packet-tunnel log is still empty.
+    static func shouldWarnMissingEngineLog(
+        previousStatus: NEVPNStatus,
+        currentStatus: NEVPNStatus,
+        extensionLog: String
+    ) -> Bool {
+        previousStatus == .connecting
+            && (currentStatus == .disconnected || currentStatus == .invalid)
+            && extensionLog.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

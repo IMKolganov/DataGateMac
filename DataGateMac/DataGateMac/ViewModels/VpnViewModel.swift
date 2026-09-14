@@ -68,7 +68,7 @@ final class VpnViewModel: ObservableObject {
     /// Issued OVPN / client-link file name from the backend, when available.
     @Published var activeIssuedFileName: String = ""
     @Published var logText: String = ""
-    /// Log lines written by the packet tunnel extension (read from App Group shared file); polled every second.
+    /// Packet-tunnel engine log pulled over `sendProviderMessage("logs")`. Kept after Disconnect.
     @Published var extensionLogText: String = ""
     /// Inline troubleshooting (code 14 or VPN permission / error 5).
     @Published var showVpnProfileResetSuggestion = false
@@ -97,10 +97,8 @@ final class VpnViewModel: ObservableObject {
     private var liveTrafficPollTimer: Timer?
     private var liveTrafficSampler = LiveTrafficSampler()
     private var cancellables = Set<AnyCancellable>()
-    /// Reading the shared App Group container from the host app triggers
-    /// macOS "access data from other apps" prompts on some systems.
-    /// Keep automatic reads off by default; use Console/shared file only when needed.
-    private let autoReadExtensionLogsFromAppGroup = false
+    /// True while an extension-log IPC poll is running (avoid overlapping Tasks).
+    private var extensionLogPollInFlight = false
     /// True while loadOrCreateConfiguration / setConfiguration is in progress.
     private var isPreparing: Bool = false
     /// True from Connect tap until startTunnel() has been called (or failed). Prevents multiple connect taps.
@@ -151,32 +149,52 @@ final class VpnViewModel: ObservableObject {
         }
     }
 
+    var engineLogDisplayText: String {
+        EngineLogDisplay.combined(
+            hostLog: logText,
+            extensionLog: extensionLogText,
+            separator: L10n.tr("vpn_extension_log_separator", "--- Extension ---"),
+            emptyExtensionPlaceholder: L10n.tr(
+                "vpn_extension_log_empty",
+                "(no packet tunnel logs yet — they appear once the system extension is running)"
+            )
+        )
+    }
+
     private func startExtensionLogPolling() {
-        guard autoReadExtensionLogsFromAppGroup else {
-            extensionLogPollTimer?.invalidate()
-            extensionLogPollTimer = nil
-            return
-        }
         extensionLogPollTimer?.invalidate()
         extensionLogPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.refreshExtensionLog()
+            Task { @MainActor in
+                self?.refreshExtensionLog()
+            }
         }
-        RunLoop.main.add(extensionLogPollTimer!, forMode: .common)
+        if let extensionLogPollTimer {
+            RunLoop.main.add(extensionLogPollTimer, forMode: .common)
+        }
+        refreshExtensionLog()
     }
 
     private func refreshExtensionLog() {
-        guard autoReadExtensionLogsFromAppGroup else {
-            extensionLogText = ""
-            return
-        }
-        // Avoid reading the App Group from the host while idle or connecting — macOS 15+ may prompt
-        // ("…access data from other apps") on each container access when the profile does not fully authorize the group.
         let s = tunnelManager.status
-        guard s == .connected || s == .reasserting || s == .disconnecting else {
-            extensionLogText = ""
+        switch s {
+        case .connecting, .connected, .reasserting, .disconnecting:
+            break
+        default:
             return
         }
-        extensionLogText = ExtensionLogReader.read()
+        Task { @MainActor [weak self] in
+            await self?.pollExtensionLog()
+        }
+    }
+
+    private func pollExtensionLog() async {
+        guard !extensionLogPollInFlight else { return }
+        extensionLogPollInFlight = true
+        defer { extensionLogPollInFlight = false }
+        guard let text = await tunnelManager.fetchExtensionLog() else { return }
+        if !text.isEmpty {
+            extensionLogText = text
+        }
     }
 
     func toggle() {
@@ -646,13 +664,24 @@ final class VpnViewModel: ObservableObject {
     }
 
     private func syncFromTunnel() {
-        refreshExtensionLog()
         let current = tunnelManager.status
         let oldStatus = previousTunnelStatus
-        if oldStatus == .connecting && (current == .disconnected || current == .invalid) && extensionLogText.isEmpty {
-            appendLog("[Connect flow] Tunnel failed (no extension log). Check [Diagnostics] lines above; then Console.app → neagent / networkextensiond while tapping Connect; or run scripts/diagnose-vpn-extension.sh on the .app you actually run.")
-        }
+        let connectDropped = oldStatus == .connecting && (current == .disconnected || current == .invalid)
         previousTunnelStatus = current
+        if connectDropped {
+            Task { @MainActor in
+                await pollExtensionLog()
+                if ExtensionLogConnectFailure.shouldWarnMissingEngineLog(
+                    previousStatus: .connecting,
+                    currentStatus: current,
+                    extensionLog: extensionLogText
+                ) {
+                    appendLog("[Connect flow] Tunnel failed (no packet tunnel logs). The OS did not start the extension, or IPC is not up yet. Check [Diagnostics] above; Console.app → neagent / networkextensiond; or run scripts/diagnose-vpn-extension.sh on the .app you actually run.")
+                }
+            }
+        } else {
+            refreshExtensionLog()
+        }
         statusText = tunnelManager.statusDisplayText
         if let err = tunnelManager.lastError, !err.isEmpty {
             statusText += " (\(err))"

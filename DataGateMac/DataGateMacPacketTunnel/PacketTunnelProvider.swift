@@ -3,8 +3,8 @@
 //  DataGateMacPacketTunnel
 //
 //  Packet Tunnel Provider: started by the system when the app calls startVPNTunnel().
-//  Receives config (WSS + OVPN) via providerConfiguration; no ongoing IPC with the app.
-//  Status is reported to the app indirectly via NEVPNStatus (system).
+//  Receives config (WSS + OVPN) via providerConfiguration. Host IPC: "stats" and "logs"
+//  via handleAppMessage. Status is also reported indirectly via NEVPNStatus.
 //
 
 import Darwin
@@ -52,7 +52,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         ExtensionLogWriter.beginNewSession()
 
-        /// Any failure: log to shared file and complete with error so the extension never crashes and the app can see the reason (via extension log or status).
+        /// Any failure: record in the engine log (host UI via IPC) and complete with error so the extension never crashes.
         func fail(_ error: Error) {
             let msg = "[Ext] FAIL: \(error.localizedDescription)"
             log.error("\(msg)")
@@ -263,11 +263,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        guard String(data: messageData, encoding: .utf8) == "stats" else {
+        let command = String(data: messageData, encoding: .utf8)
+        switch command {
+        case "stats":
+            completionHandler?(LiveTrafficStatsCodec.encode(TunnelTrafficMeter.snapshot()))
+        case ExtensionLogWriter.ipcCommandLogs:
+            completionHandler?(Data(ExtensionLogWriter.snapshot().utf8))
+        default:
             completionHandler?(nil)
-            return
         }
-        completionHandler?(LiveTrafficStatsCodec.encode(TunnelTrafficMeter.snapshot()))
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {

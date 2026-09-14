@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import NetworkExtension
 @testable import DataGateMac
 
 final class LiveTrafficStatsTests: XCTestCase {
@@ -140,5 +141,103 @@ final class LiveTrafficStatsTests: XCTestCase {
         let kilo = LiveTrafficChart.formatRate(1024)
         XCTAssertTrue(kilo.contains("/"), kilo)
         XCTAssertFalse(LiveTrafficChart.formatBytes(2048).isEmpty)
+    }
+}
+
+final class EngineLogDisplayTests: XCTestCase {
+    func testCombinedShowsHostAndExtension() {
+        let text = EngineLogDisplay.combined(
+            hostLog: "[host] start",
+            extensionLog: "[ext] bridge up",
+            separator: "--- Extension ---",
+            emptyExtensionPlaceholder: "(empty)"
+        )
+        XCTAssertTrue(text.contains("[host] start"))
+        XCTAssertTrue(text.contains("--- Extension ---"))
+        XCTAssertTrue(text.contains("[ext] bridge up"))
+        XCTAssertFalse(text.contains("(empty)"))
+    }
+
+    func testCombinedKeepsPlaceholderUntilExtensionLogsArrive() {
+        let text = EngineLogDisplay.combined(
+            hostLog: "[host] start",
+            extensionLog: "",
+            separator: "--- Extension ---",
+            emptyExtensionPlaceholder: "(waiting)"
+        )
+        XCTAssertTrue(text.contains("--- Extension ---"))
+        XCTAssertTrue(text.contains("(waiting)"))
+    }
+
+    func testCombinedUsesExtensionOnlyWhenHostLogIsEmpty() {
+        let text = EngineLogDisplay.combined(
+            hostLog: "  \n",
+            extensionLog: "[ext] only",
+            separator: "--- Extension ---",
+            emptyExtensionPlaceholder: "(waiting)"
+        )
+        XCTAssertEqual(text, "[ext] only")
+    }
+}
+
+final class ExtensionLogBufferTests: XCTestCase {
+    func testAppendSnapshotAndReset() {
+        var buffer = ExtensionLogBuffer()
+        buffer.appendLine("[t] one")
+        buffer.appendLine("[t] two")
+        XCTAssertEqual(buffer.text, "[t] one\n[t] two")
+        buffer.reset()
+        XCTAssertEqual(buffer.text, "")
+    }
+
+    func testDropOldestCompleteLinesKeepsTrailingLines() {
+        let stored = "aaaa\nbbbb\ncccc"
+        let clipped = ExtensionLogBuffer.dropOldestCompleteLines(stored, keepingLast: 9)
+        XCTAssertFalse(clipped.hasPrefix("aa"))
+        XCTAssertTrue(clipped.contains("cccc"))
+        XCTAssertFalse(clipped.hasPrefix("\n"))
+    }
+
+    func testBufferTruncatesAtLineBoundary() {
+        var buffer = ExtensionLogBuffer()
+        buffer.maxCharacters = 20
+        buffer.appendLine("1111111111")
+        buffer.appendLine("2222222222")
+        buffer.appendLine("3333333333")
+        XCTAssertLessThanOrEqual(buffer.text.count, 20)
+        XCTAssertTrue(buffer.text.contains("3333333333"))
+        XCTAssertFalse(buffer.text.contains("1111111111"))
+    }
+}
+
+final class ExtensionLogConnectFailureTests: XCTestCase {
+    func testWarnsWhenConnectingDropsWithEmptyEngineLog() {
+        XCTAssertTrue(
+            ExtensionLogConnectFailure.shouldWarnMissingEngineLog(
+                previousStatus: .connecting,
+                currentStatus: .disconnected,
+                extensionLog: ""
+            )
+        )
+    }
+
+    func testDoesNotWarnWhenExtensionLogsArrived() {
+        XCTAssertFalse(
+            ExtensionLogConnectFailure.shouldWarnMissingEngineLog(
+                previousStatus: .connecting,
+                currentStatus: .disconnected,
+                extensionLog: "[Ext] startTunnel entered"
+            )
+        )
+    }
+
+    func testDoesNotWarnOnUserDisconnectFromConnected() {
+        XCTAssertFalse(
+            ExtensionLogConnectFailure.shouldWarnMissingEngineLog(
+                previousStatus: .connected,
+                currentStatus: .disconnected,
+                extensionLog: ""
+            )
+        )
     }
 }

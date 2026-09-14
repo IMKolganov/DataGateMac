@@ -134,7 +134,7 @@ enum VpnDiagnostics {
 
         lines.append(contentsOf: appGroupLines())
         lines.append("[Diagnostics] Saved VPN profile must use providerBundleIdentifier \(TunnelConstants.packetTunnelBundleIdentifier) (not the host app ID). Connect auto-fixes stale profiles; use Reset VPN profile if code 14 persists.")
-        lines.append("[Diagnostics] Extension logs: Console.app → subsystem imkolganov.DataGateMac.PacketTunnel (no shared file without App Group on extension).")
+        lines.append("[Diagnostics] Extension logs: Engine logs in the app (IPC while the tunnel is running); Console.app → subsystem imkolganov.DataGateMac.PacketTunnel.")
         return lines.joined(separator: "\n")
     }
 

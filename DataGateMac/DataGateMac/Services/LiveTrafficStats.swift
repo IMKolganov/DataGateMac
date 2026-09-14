@@ -140,3 +140,31 @@ nonisolated struct LiveTrafficSampler: Equatable, Sendable {
         lastAt = at
     }
 }
+
+/// In-memory packet-tunnel log ring used by the sysex (`ExtensionLogWriter`) and covered by host tests.
+nonisolated struct ExtensionLogBuffer: Equatable, Sendable {
+    private(set) var text = ""
+    var maxCharacters: Int = 48_000
+
+    mutating func reset() {
+        text = ""
+    }
+
+    mutating func appendLine(_ line: String) {
+        if !text.isEmpty {
+            text.append("\n")
+        }
+        text.append(line)
+        if text.count > maxCharacters {
+            text = Self.dropOldestCompleteLines(text, keepingLast: maxCharacters / 2)
+        }
+    }
+
+    static func dropOldestCompleteLines(_ stored: String, keepingLast limit: Int) -> String {
+        guard stored.count > limit else { return stored }
+        let clipped = String(stored.suffix(limit))
+        guard let newline = clipped.firstIndex(of: "\n") else { return clipped }
+        let after = clipped.index(after: newline)
+        return after < clipped.endIndex ? String(clipped[after...]) : ""
+    }
+}

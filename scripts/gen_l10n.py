@@ -321,6 +321,7 @@ EN: dict[str, str] = {
     "vpn_action_updating_config": "updating VPN configuration",
     "vpn_action_resetting_config": "resetting VPN configuration",
     "vpn_extension_log_separator": "--- Extension ---",
+    "vpn_extension_log_empty": "(no packet tunnel logs yet — they appear once the system extension is running)",
 }
 
 # Per-language overrides (only keys that differ from English; empty dict = use English).
@@ -586,6 +587,7 @@ OVERRIDES: dict[str, dict[str, str]] = {
         "vpn_action_updating_config": "обновлении конфигурации VPN",
         "vpn_action_resetting_config": "сбросе конфигурации VPN",
         "vpn_extension_log_separator": "--- Расширение ---",
+        "vpn_extension_log_empty": "(пока нет логов пакетного туннеля — они появятся, когда системное расширение запустится)",
     },
     "de": {
         "lang_system": "Systemsprache folgen",

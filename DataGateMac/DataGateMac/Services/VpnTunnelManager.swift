@@ -264,6 +264,8 @@ final class VpnTunnelManager: ObservableObject {
     private var statusObserver: NSObjectProtocol?
     /// Fallback when `NEVPNStatusDidChange` does not fire (macOS sometimes uses a different connection instance than `manager.connection`).
     private var statusPollTimer: Timer?
+    /// Apple allows only one `sendProviderMessage` in flight; serialize stats + logs.
+    private let providerIpcQueue = DispatchQueue(label: "imkolganov.DataGateMac.provider-ipc")
 
     /// When set, critical steps are logged here (e.g. for UI display). Callbacks are invoked on main.
     var onLog: ((String) -> Void)?
@@ -603,30 +605,71 @@ final class VpnTunnelManager: ObservableObject {
         return LiveTrafficCounterSource.preferred(flow: ipc ?? .zero, utun: host)
     }
 
+    /// Packet-tunnel engine log (in-memory in the sysex). Works while Connecting/Connected/Reasserting/Disconnecting.
+    func fetchExtensionLog() async -> String? {
+        guard let session = manager?.connection as? NETunnelProviderSession,
+              Self.canSendProviderMessage(status: session.status) else {
+            return nil
+        }
+        guard let data = await sendProviderMessage(Data(ExtensionLogReader.ipcCommandLogs.utf8), session: session, timeout: 0.8) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func canSendProviderMessage(status: NEVPNStatus) -> Bool {
+        switch status {
+        case .connecting, .connected, .reasserting, .disconnecting:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func ipcTrafficSnapshot(session: NETunnelProviderSession, timeout: TimeInterval) async -> LiveTrafficSnapshot? {
-        await withTaskGroup(of: LiveTrafficSnapshot?.self) { group in
-            group.addTask {
-                await withCheckedContinuation { (cont: CheckedContinuation<LiveTrafficSnapshot?, Never>) in
-                    do {
-                        try session.sendProviderMessage(Data("stats".utf8)) { data in
-                            guard let data else {
-                                cont.resume(returning: nil)
-                                return
-                            }
-                            cont.resume(returning: LiveTrafficStatsCodec.decode(data))
-                        }
-                    } catch {
-                        cont.resume(returning: nil)
+        guard let data = await sendProviderMessage(Data("stats".utf8), session: session, timeout: timeout) else {
+            return nil
+        }
+        return LiveTrafficStatsCodec.decode(data)
+    }
+
+    private func sendProviderMessage(_ payload: Data, session: NETunnelProviderSession, timeout: TimeInterval) async -> Data? {
+        await withCheckedContinuation { (cont: CheckedContinuation<Data?, Never>) in
+            providerIpcQueue.async {
+                let state = NSLock()
+                var result: Data?
+                var resumed = false
+                func resumeOnce() {
+                    state.lock()
+                    let value = result
+                    let already = resumed
+                    resumed = true
+                    state.unlock()
+                    if !already {
+                        cont.resume(returning: value)
                     }
                 }
+
+                let callbackArrived = DispatchSemaphore(value: 0)
+                do {
+                    try session.sendProviderMessage(payload) { data in
+                        state.lock()
+                        result = data
+                        state.unlock()
+                        callbackArrived.signal()
+                    }
+                } catch {
+                    resumeOnce()
+                    return
+                }
+                let timedOut = callbackArrived.wait(timeout: .now() + timeout) == .timedOut
+                resumeOnce()
+                if timedOut {
+                    // Keep this serial slot until Apple delivers the handler so the next
+                    // stats/logs sendProviderMessage is not overlapped.
+                    _ = callbackArrived.wait(timeout: .now() + 5)
+                }
             }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first ?? nil
         }
     }
 

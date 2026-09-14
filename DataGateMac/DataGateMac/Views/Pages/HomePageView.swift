@@ -11,10 +11,6 @@ struct HomePageView: View {
     @ObservedObject var vm: VpnViewModel
     @AppStorage("homeShowEngineLogs") private var showEngineLogs = false
 
-    private var extensionSeparator: String {
-        L10n.tr("vpn_extension_log_separator", "--- Extension ---")
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -185,11 +181,7 @@ struct HomePageView: View {
                     .toggleStyle(.checkbox)
                     if showEngineLogs {
                         TextEditor(text: Binding(
-                            get: {
-                                vm.extensionLogText.isEmpty
-                                    ? vm.logText
-                                    : vm.logText + "\n" + extensionSeparator + "\n" + vm.extensionLogText
-                            },
+                            get: { vm.engineLogDisplayText },
                             set: { _ in }
                         ))
                         .font(.system(.caption, design: .monospaced))
