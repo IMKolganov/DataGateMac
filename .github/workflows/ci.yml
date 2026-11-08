@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop, 'sync/**']
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Build libXray
+        run: |
+          scripts/bootstrap-go.sh
+          scripts/build-libxray.sh
+
+      - name: Build and test
+        working-directory: DataGateMac
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project DataGateMac.xcodeproj \
+            -scheme DataGateMac \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= \
+            | tail -200
