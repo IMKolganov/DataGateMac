@@ -62,7 +62,7 @@ nonisolated enum CrashReporting {
         )
         await CrashReportUploader.uploadPending(
             directory: directory,
-            session: URLSession.shared,
+            session: ClientIdentity.session,
             config: config
         )
     }

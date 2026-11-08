@@ -385,7 +385,7 @@ final class GoogleAuthService {
         request.httpBody = try JSONEncoder().encode(body)
         request.timeoutInterval = backendTimeout
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AuthError.httpError("Invalid response")
         }

@@ -50,7 +50,7 @@ final class OpenVpnFilesApiClient {
         let body = DownloadFileByCnRequest(vpnServerId: vpnServerId, commonName: commonName)
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
 
         if http.statusCode == 404 {
@@ -90,7 +90,7 @@ final class OpenVpnFilesApiClient {
         )
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
         guard (200...299).contains(http.statusCode) else {
             let raw = String(data: data, encoding: .utf8) ?? ""

@@ -32,7 +32,7 @@ final class QuotaPlanApiClient {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(IncludeInactiveBody(includeInactive: includeInactive))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ApiClientError.invalidResponse
         }
@@ -60,7 +60,7 @@ final class QuotaPlanApiClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ApiClientError.invalidResponse
         }

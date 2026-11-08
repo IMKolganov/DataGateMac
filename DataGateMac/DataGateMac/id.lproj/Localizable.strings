@@ -30,6 +30,8 @@
 "appearance_light" = "Light";
 "appearance_system" = "System";
 "auth_checking" = "Checking authorization…";
+"client_outdated_message" = "Versi DataGate ini tidak lagi didukung oleh server. Perbarui aplikasi.";
+"client_outdated_title" = "Pembaruan diperlukan";
 "content_title" = "DataGateMac";
 "google_progress_browser_wait" = "Browser opened. Waiting for Google to call back to 127.0.0.1:%d…";
 "google_progress_callback" = "Google callback received from localhost. Finishing sign-in…";
@@ -258,6 +260,7 @@
 "vpn_err_ne_rw_failed" = "VPN configuration read/write failed (check entitlements).";
 "vpn_err_ne_stale" = "VPN configuration stale; reload and try again.";
 "vpn_err_permission_fmt" = "Permission denied while %@. macOS blocked VPN configuration changes. Remove DataGate in System Settings → VPN, relaunch the app from Applications, then try Connect again and allow the prompt. [%@ code %d]";
+"vpn_extension_log_empty" = "(no packet tunnel logs yet — they appear once the system extension is running)";
 "vpn_extension_log_separator" = "--- Extension ---";
 "vpn_flow_backend_unavailable" = "Could not build VPN configuration from the backend.";
 "vpn_flow_sign_in_again" = "Sign in again before connecting.";

@@ -30,6 +30,8 @@
 "appearance_light" = "Светлая";
 "appearance_system" = "Системная";
 "auth_checking" = "Проверка авторизации…";
+"client_outdated_message" = "Эта версия DataGate больше не поддерживается сервером. Обновите приложение.";
+"client_outdated_title" = "Требуется обновление";
 "content_title" = "DataGateMac";
 "google_progress_browser_wait" = "Браузер открыт. Ожидание ответа Google на 127.0.0.1:%d…";
 "google_progress_callback" = "Ответ Google получен. Завершение входа…";

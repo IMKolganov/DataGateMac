@@ -33,7 +33,7 @@ final class OpenVpnServersApiClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ApiClientError.invalidResponse
         }

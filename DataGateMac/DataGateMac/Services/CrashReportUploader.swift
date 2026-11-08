@@ -29,8 +29,10 @@ nonisolated enum CrashReportUploader {
         URL(string: "\(apiBaseUrl)/api/v1/mobile/crash-ingest")
     }
 
-    static func decision(statusCode: Int) -> CrashReportUploadDecision {
+    static func decision(statusCode: Int, body: Data = Data()) -> CrashReportUploadDecision {
         if (200...299).contains(statusCode) { return .delete }
+        // This build's client identity is refused: keep the report for an updated app.
+        if statusCode == 400, ClientIdentity.rejectionCode(from: body) != nil { return .retry }
         if statusCode == 400 || statusCode == 413 { return .delete }
         return .retry
     }
@@ -69,9 +71,15 @@ nonisolated enum CrashReportUploader {
                     continue
                 }
                 let request = makeRequest(fileURL: fileURL, body: body, config: config)
-                let (_, response) = try await session.data(for: request)
+                let (responseBody, response) = try await session.data(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                switch decision(statusCode: status) {
+                if status == 400, let code = ClientIdentity.rejectionCode(from: responseBody) {
+                    // Every other report would be refused too: keep them all for an updated build.
+                    crashReportLog.error("Crash ingest refused this build (\(code, privacy: .public)); keeping reports")
+                    ClientIdentity.notifyRejected(code)
+                    return
+                }
+                switch decision(statusCode: status, body: responseBody) {
                 case .delete:
                     try fileManager.removeItem(at: fileURL)
                     crashReportLog.info("Uploaded crash report \(fileURL.lastPathComponent, privacy: .public) status=\(status)")

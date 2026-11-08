@@ -174,7 +174,7 @@ final class AuthSession {
         let data: Data
         let http: HTTPURLResponse
         do {
-            let (body, resp) = try await URLSession.shared.data(for: req)
+            let (body, resp) = try await ClientIdentity.data(for: req)
             guard let httpResp = resp as? HTTPURLResponse else {
                 setFailure("refresh returned a non-HTTP response")
                 return nil

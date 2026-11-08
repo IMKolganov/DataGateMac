@@ -30,6 +30,8 @@
 "appearance_light" = "Light";
 "appearance_system" = "System";
 "auth_checking" = "Checking authorization…";
+"client_outdated_message" = "This version of DataGate is no longer supported by the server. Please update the app.";
+"client_outdated_title" = "Update required";
 "content_title" = "DataGateMac";
 "google_progress_browser_wait" = "Browser opened. Waiting for Google to call back to 127.0.0.1:%d…";
 "google_progress_callback" = "Google callback received from localhost. Finishing sign-in…";

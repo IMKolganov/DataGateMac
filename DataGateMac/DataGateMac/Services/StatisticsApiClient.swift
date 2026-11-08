@@ -40,7 +40,7 @@ final class StatisticsApiClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
         if http.statusCode == 401 || http.statusCode == 403 { throw ApiClientError.unauthorized }
         guard (200...299).contains(http.statusCode) else {
@@ -83,7 +83,7 @@ final class StatisticsApiClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await ClientIdentity.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ApiClientError.invalidResponse }
         if http.statusCode == 401 || http.statusCode == 403 { throw ApiClientError.unauthorized }
         guard (200...299).contains(http.statusCode) else {

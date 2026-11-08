@@ -918,6 +918,55 @@ OVERRIDES: dict[str, dict[str, str]] = {
 }
 
 
+# "Update required" when the backend refuses this build's client identity (X-Client-Name / X-Client-Version).
+CLIENT_OUTDATED: dict[str, tuple[str, str]] = {
+    "en": ("Update required", "This version of DataGate is no longer supported by the server. Please update the app."),
+    "ar": ("التحديث مطلوب", "لم يعد الخادم يدعم هذا الإصدار من DataGate. يرجى تحديث التطبيق."),
+    "bg": ("Необходима е актуализация", "Тази версия на DataGate вече не се поддържа от сървъра. Моля, актуализирайте приложението."),
+    "cs": ("Vyžadována aktualizace", "Tato verze DataGate už není serverem podporována. Aktualizujte prosím aplikaci."),
+    "da": ("Opdatering påkrævet", "Denne version af DataGate understøttes ikke længere af serveren. Opdater venligst appen."),
+    "de": ("Update erforderlich", "Diese Version von DataGate wird vom Server nicht mehr unterstützt. Bitte aktualisiere die App."),
+    "el": ("Απαιτείται ενημέρωση", "Αυτή η έκδοση του DataGate δεν υποστηρίζεται πλέον από τον διακομιστή. Ενημερώστε την εφαρμογή."),
+    "es": ("Actualización necesaria", "El servidor ya no admite esta versión de DataGate. Actualiza la aplicación."),
+    "es-MX": ("Actualización necesaria", "El servidor ya no admite esta versión de DataGate. Actualiza la aplicación."),
+    "et": ("Vajalik on värskendus", "Server ei toeta enam seda DataGate'i versiooni. Palun värskenda rakendust."),
+    "fa-IR": ("به‌روزرسانی لازم است", "این نسخه از DataGate دیگر توسط سرور پشتیبانی نمی‌شود. لطفاً برنامه را به‌روزرسانی کنید."),
+    "fi": ("Päivitys vaaditaan", "Palvelin ei enää tue tätä DataGate-versiota. Päivitä sovellus."),
+    "fil": ("Kailangang mag-update", "Hindi na sinusuportahan ng server ang bersyong ito ng DataGate. Paki-update ang app."),
+    "fr": ("Mise à jour requise", "Cette version de DataGate n’est plus prise en charge par le serveur. Veuillez mettre à jour l’application."),
+    "ga": ("Nuashonrú ag teastáil", "Ní thacaíonn an freastalaí leis an leagan seo de DataGate a thuilleadh. Nuashonraigh an aip le do thoil."),
+    "hi-IN": ("अपडेट ज़रूरी है", "सर्वर अब DataGate के इस संस्करण का समर्थन नहीं करता। कृपया ऐप अपडेट करें।"),
+    "hr": ("Potrebno ažuriranje", "Poslužitelj više ne podržava ovu verziju aplikacije DataGate. Ažurirajte aplikaciju."),
+    "hu": ("Frissítés szükséges", "A szerver már nem támogatja a DataGate ezen verzióját. Kérjük, frissítsd az alkalmazást."),
+    "id": ("Pembaruan diperlukan", "Versi DataGate ini tidak lagi didukung oleh server. Perbarui aplikasi."),
+    "it": ("Aggiornamento necessario", "Questa versione di DataGate non è più supportata dal server. Aggiorna l’app."),
+    "ja": ("アップデートが必要です", "このバージョンの DataGate はサーバーでサポートされなくなりました。アプリをアップデートしてください。"),
+    "ko": ("업데이트 필요", "이 버전의 DataGate는 더 이상 서버에서 지원되지 않습니다. 앱을 업데이트하세요."),
+    "lt": ("Reikia atnaujinti", "Serveris nebepalaiko šios DataGate versijos. Atnaujinkite programėlę."),
+    "lv": ("Nepieciešams atjauninājums", "Serveris vairs neatbalsta šo DataGate versiju. Lūdzu, atjauniniet lietotni."),
+    "mt": ("Meħtieġ aġġornament", "Din il-verżjoni ta’ DataGate m’għadhiex appoġġjata mis-server. Jekk jogħġbok aġġorna l-app."),
+    "nl": ("Update vereist", "Deze versie van DataGate wordt niet meer ondersteund door de server. Werk de app bij."),
+    "pl": ("Wymagana aktualizacja", "Ta wersja DataGate nie jest już obsługiwana przez serwer. Zaktualizuj aplikację."),
+    "pt": ("Atualização necessária", "Esta versão do DataGate já não é suportada pelo servidor. Atualize a aplicação."),
+    "pt-BR": ("Atualização necessária", "Esta versão do DataGate não é mais compatível com o servidor. Atualize o app."),
+    "ro": ("Actualizare necesară", "Această versiune DataGate nu mai este acceptată de server. Actualizează aplicația."),
+    "ru": ("Требуется обновление", "Эта версия DataGate больше не поддерживается сервером. Обновите приложение."),
+    "sk": ("Vyžaduje sa aktualizácia", "Server už nepodporuje túto verziu DataGate. Aktualizujte aplikáciu."),
+    "sl": ("Potrebna je posodobitev", "Strežnik ne podpira več te različice DataGate. Posodobite aplikacijo."),
+    "sv": ("Uppdatering krävs", "Den här versionen av DataGate stöds inte längre av servern. Uppdatera appen."),
+    "th": ("ต้องอัปเดต", "เซิร์ฟเวอร์ไม่รองรับ DataGate เวอร์ชันนี้อีกต่อไป โปรดอัปเดตแอป"),
+    "tr": ("Güncelleme gerekli", "DataGate’in bu sürümü artık sunucu tarafından desteklenmiyor. Lütfen uygulamayı güncelleyin."),
+    "uk": ("Потрібне оновлення", "Ця версія DataGate більше не підтримується сервером. Оновіть застосунок."),
+    "vi": ("Cần cập nhật", "Máy chủ không còn hỗ trợ phiên bản DataGate này. Vui lòng cập nhật ứng dụng."),
+    "zh-Hans": ("需要更新", "服务器已不再支持此版本的 DataGate。请更新应用。"),
+    "zh-Hant": ("需要更新", "伺服器已不再支援此版本的 DataGate。請更新應用程式。"),
+}
+for _lang, (_title, _body) in CLIENT_OUTDATED.items():
+    _target = EN if _lang == "en" else OVERRIDES.setdefault(_lang, {})
+    _target["client_outdated_title"] = _title
+    _target["client_outdated_message"] = _body
+
+
 def escape_strings_value(s: str) -> str:
     return (
         s.replace("\\", "\\\\")
