@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DACF00012FA000100A1B2C30 /* OpenVpnTcpFrameDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACF00022FA000100A1B2C30 /* OpenVpnTcpFrameDecoder.swift */; };
 		DA5124C02F2F807100C61F86 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA5124C12F2F807100C61F86 /* NetworkExtension.framework */; };
 		DA5124D02F2F807100C61F86 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */; };
 		DA5124D12F2F807100C61F86 /* imkolganov.DataGateMac.PacketTunnel.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = DA5124D52F2F807100C61F86 /* imkolganov.DataGateMac.PacketTunnel.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -63,6 +64,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DACF00022FA000100A1B2C30 /* OpenVpnTcpFrameDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OpenVpnTcpFrameDecoder.swift; path = DataGateMac/Services/OpenVpnTcpFrameDecoder.swift; sourceTree = SOURCE_ROOT; };
 		DA5124A92F2F807100C61F86 /* DataGateMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DataGateMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA5124C12F2F807100C61F86 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		DA5124D22F2F807100C61F86 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
@@ -180,6 +182,7 @@
 				DAX10002FD3000100A1B2C3 /* XrayRunnerBridge.m */,
 				DAX10003FD3000100A1B2C3 /* XrayConfigAssembler.swift */,
 				DA5T00412F8100100C61F86 /* LiveTrafficStats.swift */,
+				DACF00022FA000100A1B2C30 /* OpenVpnTcpFrameDecoder.swift */,
 				DAB100052FD3000100A1B2C3 /* DataGateMacPacketTunnel-Bridging-Header.h */,
 				DA5124D32F2F807100C61F86 /* Info.plist */,
 				DA5124D42F2F807100C61F86 /* DataGateMacPacketTunnel.entitlements */,
@@ -405,6 +408,7 @@
 				DAX10011FD3000100A1B2C3 /* XrayRunnerBridge.m in Sources */,
 				DAX10012FD3000100A1B2C3 /* XrayConfigAssembler.swift in Sources */,
 				DA5T00422F8100100C61F86 /* LiveTrafficStats.swift in Sources */,
+				DACF00012FA000100A1B2C30 /* OpenVpnTcpFrameDecoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

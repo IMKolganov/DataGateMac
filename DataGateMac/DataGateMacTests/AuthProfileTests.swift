@@ -7,6 +7,32 @@ import XCTest
 @testable import DataGateMac
 
 final class AuthProfileTests: XCTestCase {
+    func testUdpProxyFramingReassemblesEveryTcpSplit() throws {
+        let stream = Data([0, 4, 1, 2, 3, 4, 0, 2, 5, 6])
+        for split in 0...stream.count {
+            var decoder = OpenVpnTcpFrameDecoder()
+            let first = try decoder.append(Data(stream.prefix(split)))
+            let second = try decoder.append(Data(stream.dropFirst(split)))
+            XCTAssertEqual(first + second, stream, "split=\(split)")
+            XCTAssertTrue(first.isEmpty || first == stream.prefix(6) || first == stream)
+        }
+    }
+
+    func testUdpProxyFramingHandlesBytewiseAndMaximumDatagram() throws {
+        let stream = Data([255, 255]) + Data(repeating: 7, count: 65535)
+        var decoder = OpenVpnTcpFrameDecoder()
+        for byte in stream.dropLast() {
+            XCTAssertTrue(try decoder.append(Data([byte])).isEmpty)
+        }
+        XCTAssertEqual(try decoder.append(Data([stream.last!])), stream)
+        XCTAssertTrue(try decoder.append(Data()).isEmpty)
+    }
+
+    func testUdpProxyFramingRejectsEmptyDatagram() {
+        var decoder = OpenVpnTcpFrameDecoder()
+        XCTAssertThrowsError(try decoder.append(Data([0, 0])))
+    }
+
     func testGoogleLoginResponseDecodesAvatarUrl() throws {
         let json = """
         {

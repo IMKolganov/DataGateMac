@@ -32,6 +32,7 @@ final class WSSBridge {
     private let listenPort: UInt16
     private let verifyServerCert: Bool
     private let log: Logger
+    private let usesDatagramFraming: Bool
 
     private var listener: NWListener?
     private var currentConnection: NWConnection?
@@ -46,10 +47,13 @@ final class WSSBridge {
     init(host: String, port: Int, path: String, listenPort: Int, verifyServerCert: Bool, log: Logger) {
         self.host = host
         self.port = port
-        self.path = path.hasPrefix("/") ? path : "/" + path
+        let normalizedPath = path.hasPrefix("/") ? path : "/" + path
+        self.path = normalizedPath
         self.listenPort = UInt16(listenPort)
         self.verifyServerCert = verifyServerCert
         self.log = log
+        let query = URLComponents(string: "https://localhost" + normalizedPath)?.queryItems ?? []
+        self.usesDatagramFraming = query.contains { $0.name == "mode" && $0.value == "udp" }
     }
 
     private var upstreamWssURL: String {
@@ -189,7 +193,11 @@ final class WSSBridge {
         relayWebSocketToTCP(connection: connection, task: task)
     }
 
-    private func relayTCPToWebSocket(connection: NWConnection, task: URLSessionWebSocketTask) {
+    private func relayTCPToWebSocket(
+        connection: NWConnection,
+        task: URLSessionWebSocketTask,
+        decoder: OpenVpnTcpFrameDecoder = OpenVpnTcpFrameDecoder()
+    ) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, error in
             guard let self, !self.isStopped else { return }
             if let error {
@@ -205,13 +213,37 @@ final class WSSBridge {
                 connection.cancel()
                 return
             }
-            task.send(.data(data)) { [weak self] err in
+            var nextDecoder = decoder
+            let outbound: Data
+            do {
+                if self.usesDatagramFraming {
+                    outbound = try nextDecoder.append(data)
+                } else {
+                    outbound = data
+                }
+            } catch {
+                ExtensionLogWriter.append("[WSSBridge] Invalid OpenVPN UDP frame: \(error)")
+                task.cancel(with: .protocolError, reason: nil)
+                connection.cancel()
+                return
+            }
+            let successor = nextDecoder
+            if outbound.isEmpty {
+                self.relayTCPToWebSocket(connection: connection, task: task, decoder: successor)
+                return
+            }
+            // Wait for the send before reading more: preserve ordering and bound queued data.
+            task.send(.data(outbound)) { [weak self] err in
                 if let err {
                     self?.log.error("WS send error: \(err.localizedDescription)")
-                    ExtensionLogWriter.append("[WSSBridge] WS send error upstream=\(self?.upstreamWssURL ?? "") bytes=\(data.count) err=\(err.localizedDescription)")
+                    ExtensionLogWriter.append("[WSSBridge] WS send error upstream=\(self?.upstreamWssURL ?? "") bytes=\(outbound.count) err=\(err.localizedDescription)")
+                    task.cancel(with: .goingAway, reason: nil)
+                    connection.cancel()
+                    return
                 }
+                guard let self, !self.isStopped else { return }
+                self.relayTCPToWebSocket(connection: connection, task: task, decoder: successor)
             }
-            self.relayTCPToWebSocket(connection: connection, task: task)
         }
     }
 
