@@ -37,7 +37,8 @@ jobs:
             -project DataGateMac.xcodeproj \
             -scheme DataGateMac \
             -destination 'platform=macOS' \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= > ../build.log 2>&1 || rc=$?
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= \
+            'OTHER_CPLUSPLUSFLAGS=$(inherited) -include fmt/format.h' > ../build.log 2>&1 || rc=$?
           grep -E -A4 ' error: |Undefined symbols|^ld: |Test Case .* failed|\*\* (BUILD|TEST)|Executed [0-9]+ test' ../build.log | head -300
           exit $rc
 
