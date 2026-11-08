@@ -21,6 +21,9 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
+      - name: Native deps (OpenVPN 3)
+        run: brew install asio fmt lz4 xxhash openssl@3
+
       - name: Build libXray
         run: |
           scripts/bootstrap-go.sh
